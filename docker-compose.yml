@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: esteps_ops
+      POSTGRES_USER: esteps
+      POSTGRES_PASSWORD: esteps123
+    ports:
+      - "5433:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U esteps -d esteps_ops"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://esteps:esteps123@db:5432/esteps_ops
+      JWT_SECRET: change-this-to-a-random-32-char-string
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 1440
+      AI_DAILY_BUDGET_USD: 10.0
+      N8N_WEBHOOK_SECRET: n8n-secret-key
+      N8N_BASE_URL: https://n8n.estepshealth.tech
+      N8N_API_KEY: ""
+      ENVIRONMENT: development
+      AUTO_CREATE_DB: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_BACKEND_URL: http://backend:8000
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+
+volumes:
+  db_data:

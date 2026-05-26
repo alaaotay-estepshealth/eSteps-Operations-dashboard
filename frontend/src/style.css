@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design token CSS custom properties (mirrors tailwind.config.js ctrl/status tokens) */
+:root {
+  /* Neutrals — light to dark */
+  --ctrl-100: oklch(92% 0.004 245);
+  --ctrl-200: oklch(80% 0.005 245);
+  --ctrl-300: oklch(68% 0.007 245);
+  --ctrl-400: oklch(55% 0.009 245);
+  --ctrl-500: oklch(55% 0.009 245);
+  --ctrl-600: oklch(38% 0.009 245);
+  --ctrl-700: oklch(27% 0.013 245);
+  --ctrl-800: oklch(27% 0.013 245);
+  --ctrl-850: oklch(20% 0.010 245);
+  --ctrl-900: oklch(14% 0.010 245);
+
+  /* Semantic status */
+  --status-success: oklch(72% 0.14 164);
+  --status-error:   oklch(66% 0.17 25);
+  --status-warn:    oklch(79% 0.15 80);
+  --status-info:    oklch(75% 0.12 205);
+
+  /* Typography */
+  --font-display: 'Syne', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+}
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    font-family: 'DM Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: oklch(10% 0.008 245);
+    color: oklch(92% 0.004 245);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: oklch(14% 0.010 245); }
+  ::-webkit-scrollbar-thumb { background: oklch(27% 0.013 245); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: oklch(34% 0.013 245); }
+
+  ::selection { background: oklch(75% 0.12 205 / 0.2); color: oklch(92% 0.004 245); }
+
+  *:focus-visible {
+    outline: 2px solid oklch(75% 0.12 205);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  * { border-color: oklch(27% 0.013 245); }
+}
+
+@layer utilities {
+  .font-display { font-family: 'Syne', sans-serif; }
+
+  /* Section title + hairline divider pattern */
+  .section-rule {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .section-rule::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: oklch(27% 0.013 245);
+  }
+
+  /* Tabular monospace numbers */
+  .tabnum {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Status dot used inside Badge */
+  .status-dot {
+    display: inline-block;
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Animated spin (replaces Tailwind's animate-spin when overridden) */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .animate-spin { animation: spin 1s linear infinite; }
+}
+
+@media print {
+  aside, header.sticky { display: none !important; }
+  main { padding: 0 !important; overflow: visible !important; }
+  .flex.h-screen { display: block !important; }
+  body { background: white !important; color: #111 !important; }
+}

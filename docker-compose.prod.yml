@@ -1,0 +1,25 @@
+version: "3.9"
+
+# Production compose — uses Supabase (no local DB service).
+# Copy backend/.env.example → backend/.env and fill all values before running.
+#
+# Deploy:
+#   docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      VITE_BACKEND_URL: ${BACKEND_PUBLIC_URL:-http://localhost:8000}
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"

@@ -1,0 +1,25 @@
+# ─── Secrets — NEVER commit ──────────────────────────────────────────────────
+.env
+**/.env
+!**/.env.example
+SECRETS.md
+wire_production.sql
+*.pem
+credentials.json
+
+# ─── Python ──────────────────────────────────────────────────────────────────
+backend/.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# ─── Node / Vite ───────────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+
+# ─── Local-only docs (kept out of the public repo) ───────────────────────────
+References/
+
+# ─── Misc ──────────────────────────────────────────────────────────────────────
+*.log
+.DS_Store
