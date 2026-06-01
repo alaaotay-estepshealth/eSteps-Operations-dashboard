@@ -4,9 +4,12 @@
          style="background-image: linear-gradient(oklch(92% 0.004 245) 1px, transparent 1px), linear-gradient(90deg, oklch(92% 0.004 245) 1px, transparent 1px); background-size: 32px 32px;" />
 
     <div class="relative w-full max-w-xs">
-      <div class="mb-8">
-        <div class="font-display font-bold text-2xl tracking-wide text-ctrl-text">eSteps</div>
-        <div class="text-2xs text-ctrl-muted uppercase tracking-label mt-1">Operations Dashboard</div>
+      <div class="mb-8 flex items-center gap-3">
+        <img src="/logo_inversed.png" alt="eSteps" class="w-12 h-12 object-contain flex-shrink-0" draggable="false" />
+        <div>
+          <div class="font-display font-bold text-2xl tracking-wide text-ctrl-text leading-tight">eSteps</div>
+          <div class="text-2xs text-ctrl-muted uppercase tracking-label mt-1">Operations Dashboard</div>
+        </div>
       </div>
 
       <div class="bg-ctrl-panel border border-ctrl-border rounded-md p-7 shadow-float">

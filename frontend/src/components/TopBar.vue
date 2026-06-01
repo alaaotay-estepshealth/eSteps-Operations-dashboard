@@ -31,14 +31,19 @@ onMounted(() => { ticker = setInterval(() => { now.value = Date.now() }, 10_000)
 onBeforeUnmount(() => clearInterval(ticker))
 
 const titles = {
+  '/briefing':      'Morning Briefing',
   '/overview':      'Mission Control',
+  '/insights':      'Strategy Insights',
   '/pipeline':      'Lead Pipeline',
+  '/contacts':      'Contacts',
+  '/followups':     'Follow-ups & Calendar',
   '/workflows':     'Workflow Executions',
   '/ai':            'AI Monitor',
   '/system':        'System Logs',
   '/systems':       'All Systems',
   '/review':        'Human Review Queue',
   '/n8n':           'n8n Workflows',
+  '/agent':         'OpenClaw Agent',
   '/emails':        'Email Analytics',
   '/opportunities': 'Opportunities & Deals',
   '/bookings':      'Bookings',

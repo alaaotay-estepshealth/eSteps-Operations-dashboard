@@ -134,18 +134,37 @@ def seed_systems(db: Session) -> dict:
     return all_systems
 
 
+TEST_USERS = [
+    # username, email, password, role
+    ("admin",    "admin@estepshealth.com",    "admin123",    "admin"),
+    ("operator", "operator@estepshealth.com", "operator123", "operator"),
+    ("viewer",   "viewer@estepshealth.com",   "viewer123",   "readonly"),
+]
+
+
 def seed_users(db: Session):
-    if db.query(User).count() > 0:
-        return
-    users = [
-        User(username="admin", email="admin@estepshealth.com",
-             hashed_password=hash_password("admin123"), role="admin"),
-        User(username="viewer", email="viewer@estepshealth.com",
-             hashed_password=hash_password("viewer123"), role="readonly"),
-    ]
-    db.add_all(users)
+    """Upsert TEST_USERS — creates missing rows, normalizes role + password
+    on existing rows so the documented credentials always work."""
+    created = updated = 0
+    for username, email, password, role in TEST_USERS:
+        user = db.query(User).filter(User.username == username).first()
+        if user is None:
+            db.add(User(
+                username=username,
+                email=email,
+                hashed_password=hash_password(password),
+                role=role,
+                is_active=True,
+            ))
+            created += 1
+        else:
+            user.email = email
+            user.hashed_password = hash_password(password)
+            user.role = role
+            user.is_active = True
+            updated += 1
     db.commit()
-    print(f"  ✓ Created {len(users)} users")
+    print(f"  ✓ Users: {created} created, {updated} normalized")
 
 
 def seed_leads(db: Session, count: int = 972):
@@ -438,8 +457,10 @@ def run():
         seed_audit_logs(db, systems)
         seed_tickets(db)
         print("\n✅ Seed complete.\n")
-        print("  Login: admin / admin123  (role: admin)")
-        print("  Login: viewer / viewer123  (role: readonly)\n")
+        print("  Test accounts:")
+        for username, _email, password, role in TEST_USERS:
+            print(f"    • {username:<8} / {password:<12} (role: {role})")
+        print()
         print("  Systems seeded:")
         for s in systems.values():
             print(f"    • {s.slug} — POST /webhooks/{s.slug}")

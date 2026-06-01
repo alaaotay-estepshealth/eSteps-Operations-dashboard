@@ -47,22 +47,26 @@ Convert 972 academic researchers into 30–50 research partnerships through auto
 
 ---
 
-## Dashboard Views (15 routes)
+## Dashboard Views (21 routes)
 
 ### Operations
 | Route | View | Purpose |
 |---|---|---|
+| `/briefing` | BriefingView | **Landing page** — since-yesterday changes, today's priorities, recommended-to-contact-today queue, AI memo, recent activity |
 | `/systems` | SystemsOverview | Cross-system KPI grid + clickable system cards |
-| `/systems/:slug` | SystemDetail | Per-system stats + paginated execution history |
-| `/overview` | Overview | Global KPIs with delta indicators (week-over-week) |
+| `/systems/:slug` | SystemDetail | Per-system stats + activity feed + paginated execution history |
+| `/overview` | Overview | Mission Control — global KPIs, activity feed, system health |
+| `/insights` | Insights | Decision hub — KPIs vs GTM targets, week/month comparison, goal progress, trend, recommendations, sequence heatmap, conference timeline, AI memo + Ask-the-Assistant |
 
 ### Pipeline
 | Route | View | Purpose |
 |---|---|---|
-| `/pipeline` | Pipeline | Lead funnel + research areas + filtered/paginated lead table |
+| `/pipeline` | Pipeline | Lead funnel + research areas + filtered/paginated lead table + row actions |
+| `/contacts` | ContactsView | People we contacted — searchable, Hot filter (score ≥ 7), per-person timeline drawer + quick actions |
 | `/emails` | EmailAnalytics | Delivery/open/bounce rates, per-step metrics, A/B comparison, paginated logs |
 | `/bookings` | BookingsView | Upcoming/past meetings, no-show rate, status filter |
 | `/opportunities` | OpportunitiesDeals | Deal pipeline funnel, tier breakdown, paginated deals |
+| `/followups` | FollowupsView | Overdue / due-today / this-week / upcoming-meetings / hot-needing-action + Reschedule/Drop actions |
 
 ### Automation
 | Route | View | Purpose |
@@ -70,6 +74,7 @@ Convert 972 academic researchers into 30–50 research partnerships through auto
 | `/workflows` | Workflows | Workflow execution health + 14-day bar chart |
 | `/n8n` | N8nWorkflows | Live n8n workflows with Trigger / Activate / Deactivate actions |
 | `/ai` | AIMonitor | AI decision quality + cost + confidence with type/status/confidence filters |
+| `/agent` | OpenClawView | Launch OpenClaw agent actions (acts on DBs/email/CRM/drive) — admin-only, audited, confirm-gated |
 | `/review` | HumanReview | AI decisions pending approval — Approve / Reject / Override with reviewer notes |
 
 ### Strategy
@@ -87,26 +92,42 @@ _Last updated: 2026-05-26_
 
 ### ✅ Done
 
-- Core dashboard — 16 views, 11 routers, JWT + RBAC (admin/operator/readonly)
+- Core dashboard — 21 views, 18 routers, JWT + RBAC (admin/operator/readonly)
 - Dual-DB live wiring — ops DB (eu-west-1) + leads source DB (eu-central-1, 1,408 leads); n8n proxy (53 live workflows)
 - **AI decision ingest** — `POST /webhooks/{slug}/ai-decision` (HMAC-gated, idempotent on `decision_id`, auto-routes confidence < 0.70 to the review queue)
 - **Pipeline write-back actions** — Pause / Resume / Bump priority / Mark cold (admin + operator only, audit-logged to ops DB)
 - **Per-system Mission Control** — live activity feed on `/systems/:slug`
 - **Active alerts** — `GET /admin/dashboard/alerts` + dashboard-wide `AlertBanner` (workflow failures, SLA breaches > 3.5h, pending review, AI budget ≥ 80%)
-- **Security hardening** — HMAC now enforced in production (a missing signature is rejected, not skipped); `.gitignore` added; test harness refuses to run against the production DB
+- **Security hardening** — HMAC enforced in production (missing signature rejected, not skipped); `.gitignore` added; test harness refuses to run against the production DB
+- **Decision-helper — Strategy Insights** (`/insights`) — KPIs vs GTM targets, week- and month-over-month comparison, goal progress, 8-week outreach trend, rule-based recommendation engine ("what to focus on"), sequence-funnel + score-distribution charts
+- **Decision-helper — AI strategy memo** — `POST /admin/insights/memo` (Gemini 2.5 Flash) writes a weekly memo (current state / risks / fixes / focus) from the rule-engine facts. On-demand button on Insights. Live (uses `GEMINI_API_KEY`)
+- **Decision-helper — Follow-ups & Calendar** (`/followups`) — overdue / due-today / this-week / upcoming-meetings / hot-needing-action, with Reschedule + Drop quick actions
+- **Decision-helper — Contacts & Hot Leads** (`/contacts`) — searchable people list, Hot filter (score ≥ 7), per-person timeline drawer (emails, replies, meetings) + quick actions; deep-linked from Follow-ups
+- **Decision-helper — Morning Briefing** (`/briefing`, landing page) — `GET /admin/briefing`: since-yesterday changes, today's priorities, recommended-to-contact-today queue (heuristic priority ranking `GET /admin/contacts/priority`), AI memo, recent activity
+- **Decision-helper — AI Ops Assistant** — `POST /admin/insights/assistant`: natural-language Q&A over live pipeline data (Gemini), chat panel on Insights
+- **Decision-helper — deeper visualizations** — sequence heatmap (`GET /admin/insights/heatmap`, area × touch), weekly outreach trend with target line, conference & geo timeline (GTM calendar)
+- **OpenClaw agent integration** (`/agent`) — launch agent actions via OpenClaw's documented `/hooks/agent` + `/hooks/wake` webhook API; **admin-only · audit-logged · explicit-confirm**; graceful 503 until configured
+- **Charts** — reusable inline-SVG `BarChart` / `LineChart` / `DonutChart` / `HeatMap`; clickable drill-downs from KPI cards, chart bars, and table rows
+- **Craft pass (impeccable)** — new views aligned to the Control Room Minimalism system: shared `StatRow` for display strips, established `hover:bg-ctrl-raised hover:shadow-float active:scale-[0.99]` card states, global focus-visible ring, status-only color
 
 ### ⏳ Pending — needs YOU (console / deploy / n8n)
 
-- **Rotate secrets** — n8n API key, ops + leads DB passwords, JWT secret (they were stored in plaintext `.env`)
-- **Flip `ENVIRONMENT=production`** at deploy (enables HMAC enforcement) + add the prod frontend origin to `CORS_ORIGINS`
-- **AI views need data** — add an HTTP node in each n8n AI workflow to POST decisions to `/webhooks/{slug}/ai-decision`; the `ai_requests` table is currently empty so AI Monitor / Review are hollow until then
-- **Pause semantics** — `Pause` clears `next_send_date`; confirm the EST-2 outreach workflow selects leads by `next_send_date` (else use `Mark cold`, which always stops)
-- **Alert/digest delivery** — n8n job polling `/admin/dashboard/alerts` → Slack/email; daily `/report` PDF digest
+These are the remaining actions to fully complete every phase. None block the dashboard from running; each one lights up a capability.
+
+1. **Restart the dev server** — Vite must reload to show the new nav: **Briefing (landing), Insights, Contacts, Follow-ups, OpenClaw Agent** (`npm run dev` + hard refresh). Log in as **admin** for AI memo / assistant / agent / write actions.
+2. **Activate OpenClaw** (enables the `/agent` action launcher):
+   - In OpenClaw: set `hooks.enabled = true` and a dedicated `hooks.token`.
+   - In `backend/.env`: `OPENCLAW_BASE_URL=https://openclaw.estepshealth.tech` and `OPENCLAW_HOOK_TOKEN=<that token>`; restart backend.
+3. **AI views need data** — add an HTTP node in each n8n AI workflow to POST decisions to `/webhooks/{slug}/ai-decision`; `ai_requests` is empty so AI Monitor / Review stay hollow until then.
+4. **Confirm pause semantics** — `Pause` / `Reschedule` clear/reset `next_send_date`; verify the EST-2 outreach workflow selects leads by `next_send_date` (else `Mark cold` / `Drop` always stops outreach).
+5. **Alert / digest delivery** — n8n job polling `GET /admin/dashboard/alerts` → Slack/email; optional daily `/report` PDF digest.
+6. **Rotate secrets** — n8n API key, ops + leads DB passwords, `JWT_SECRET`, `GEMINI_API_KEY`, and the OpenClaw `hooks.token` (all were in plaintext env / shared in chat). Already gitignored; keep them out of any pushed repo.
+7. **Deploy hardening** — set `ENVIRONMENT=production` (enables HMAC), add the prod frontend origin to `CORS_ORIGINS`, and set `GEMINI_API_KEY` + `OPENCLAW_*` in the deployed environment (else those features 503 gracefully).
 
 ### ⏳ Pending — code (ready to build)
 
-- **Router tests** — harness is now safe; the 8 newer routers (emails / bookings / opportunities / tickets / gtm / systems / n8n_proxy / webhooks) still need tests. Requires `TEST_DATABASE_URL` (throwaway Postgres) to run — never the prod Supabase URL.
-- **Reply-from-dash** — Human Review approve → send the drafted reply via n8n (needs an n8n send-webhook URL)
+- **Router tests** — harness is now safe; the newer routers (emails / bookings / opportunities / tickets / gtm / systems / n8n_proxy / webhooks / insights / followups / contacts / lead_actions) still need tests. Requires `TEST_DATABASE_URL` (throwaway Postgres) to run — never the prod Supabase URL.
+- **Reply-from-dash** — Human Review approve → send the drafted reply via n8n (needs an n8n send-webhook URL).
 
 ### 🔭 Larger / infra projects
 
@@ -259,14 +280,14 @@ dashboard-system/
 │   ├── Dockerfile
 │   ├── alembic/versions/           ← DB migrations (0001 initial + 0002 multi-system)
 │   └── app/
-│       ├── main.py                 ← FastAPI init, CORS, 11 routers
+│       ├── main.py                 ← FastAPI init, CORS, 18 routers
 │       ├── config.py               ← Settings (env vars via pydantic-settings)
 │       ├── database.py             ← Dual SQLAlchemy sessions (ops + leads)
 │       ├── auth.py                 ← JWT + require_admin + require_operator
 │       ├── sync_n8n.py             ← n8n REST API execution sync
 │       ├── seed.py                 ← Seeds 5 systems + demo data
 │       ├── models/                 ← 11 ORM models (system, lead, ticket, etc.)
-│       ├── routers/                ← 11 route modules
+│       ├── routers/                ← 18 route modules
 │       │   ├── admin.py            ← Dashboard + pipeline + AI + logs + alerts + sync
 │       │   ├── auth.py             ← POST /auth/token
 │       │   ├── webhooks.py         ← Per-system + legacy webhooks + AI-decision ingest
@@ -277,7 +298,12 @@ dashboard-system/
 │       │   ├── opportunities.py    ← /admin/opportunities/*
 │       │   ├── tickets.py          ← /admin/tickets/*
 │       │   ├── gtm.py              ← /admin/gtm/*
-│       │   └── lead_actions.py     ← /admin/leads/{id}/action (pause/resume/cold/priority)
+│       │   ├── lead_actions.py     ← /admin/leads/{id}/action (pause/resume/cold/priority)
+│       │   ├── insights.py         ← /admin/insights (+ memo, assistant, heatmap)
+│       │   ├── followups.py        ← /admin/followups (overdue/today/week/meetings/hot)
+│       │   ├── contacts.py         ← /admin/contacts (+ detail/timeline, priority queue)
+│       │   ├── briefing.py         ← /admin/briefing (overnight deltas + priorities)
+│       │   └── openclaw.py         ← /admin/openclaw/* (agent action launcher)
 │       ├── services/
 │       │   └── system_service.py   ← Cross-system aggregations + per-system activity
 │       ├── tests/                  ← pytest (conftest guard refuses prod DB)
@@ -293,7 +319,12 @@ dashboard-system/
         ├── stores/
         │   ├── auth.js             ← JWT token + role (Pinia)
         │   └── system.js           ← Multi-system filter (Pinia)
-        ├── views/                   ← 16 views + Login
+        ├── views/                   ← 21 views + Login
+        │   ├── BriefingView.vue    ← /briefing — landing: overnight, priorities, recommended-today, memo
+        │   ├── Insights.vue        ← /insights — decision hub: KPIs vs targets, charts, heatmap, memo, assistant
+        │   ├── ContactsView.vue    ← /contacts — people + Hot filter + timeline drawer
+        │   ├── FollowupsView.vue   ← /followups — overdue/today/week/meetings + actions
+        │   ├── OpenClawView.vue    ← /agent — OpenClaw agent action launcher
         │   ├── Overview.vue        ← /overview — Mission Control (KPIs, activity, health)
         │   ├── Pipeline.vue        ← /pipeline — funnel + filters + row actions
         │   ├── EmailAnalytics.vue  ← /emails — delivery + A/B
@@ -313,7 +344,8 @@ dashboard-system/
         │   ├── Sidebar.vue         ← 4-section nav
         │   ├── TopBar.vue          ← Title + last-synced + refresh
         │   ├── AlertBanner.vue     ← Dashboard-wide active-alert banner (polls 60s)
-        │   └── ui/                 ← StatRow, Badge, Table, SectionContainer, EmptyState, Sparkline
+        │   ├── AssistantPanel.vue  ← AI Ops Assistant chat (used on Insights)
+        │   └── ui/                 ← StatRow, Badge, Table, SectionContainer, EmptyState, Sparkline, BarChart, LineChart, DonutChart, HeatMap
         └── style.css               ← OKLCH design tokens + Tailwind
 ```
 

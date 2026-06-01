@@ -41,6 +41,15 @@ export const adminAPI = {
   getPipelineLeads: (params = {}) => api.get('/admin/pipeline/leads', { params }),
   getResearchStats: () => api.get('/admin/pipeline/research-stats'),
   getAlerts: () => api.get('/admin/dashboard/alerts'),
+  getInsights: () => api.get('/admin/insights'),
+  getBriefing: () => api.get('/admin/briefing'),
+  getHeatmap: () => api.get('/admin/insights/heatmap'),
+  generateMemo: () => api.post('/admin/insights/memo'),
+  askAssistant: (question) => api.post('/admin/insights/assistant', { question }),
+  getFollowups: () => api.get('/admin/followups'),
+  getContacts: (params = {}) => api.get('/admin/contacts', { params }),
+  getContact: (leadId) => api.get(`/admin/contacts/${encodeURIComponent(leadId)}`),
+  getPriorityQueue: (limit = 12) => api.get('/admin/contacts/priority', { params: { limit } }),
   leadAction: (leadId, body) => api.post(`/admin/leads/${encodeURIComponent(leadId)}/action`, body),
   getReviewQueue: () => api.get('/admin/human-review/queue'),
   resolveReview: (id, resolution) => api.post(`/admin/human-review/queue/${id}/resolve`, resolution),
@@ -60,6 +69,12 @@ export const n8nAPI = {
   executeWorkflow: (id) => api.post(`/proxy/n8n/workflows/${id}/execute`),
   activateWorkflow: (id) => api.post(`/proxy/n8n/workflows/${id}/activate`),
   deactivateWorkflow: (id) => api.post(`/proxy/n8n/workflows/${id}/deactivate`),
+}
+
+export const openclawAPI = {
+  status: () => api.get('/admin/openclaw/status'),
+  runAgent: (body) => api.post('/admin/openclaw/agent', body),
+  wake: (text) => api.post('/admin/openclaw/wake', { text }),
 }
 
 export const emailsAPI = {

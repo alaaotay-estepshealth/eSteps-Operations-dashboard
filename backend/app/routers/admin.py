@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -539,20 +539,28 @@ def get_review_queue(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     items = db.query(AIRequest).filter(
         AIRequest.status == "pending_review"
     ).order_by(AIRequest.created_at.asc()).all()
+
+    def _age_hours(created):
+        if created is None:
+            return 0.0
+        # normalize naive datetimes (from older seed data) to UTC
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        return (now - created).total_seconds() / 3600
 
     return [
         ReviewItem(
             id=item.id,
             created_at=item.created_at,
-            request_type=item.request_type,
+            request_type=item.request_type or "unknown",
             input_preview=item.input_preview,
             confidence_score=item.confidence_score,
-            age_hours=round((now - item.created_at).total_seconds() / 3600, 1),
-            sla_breach=((now - item.created_at).total_seconds() / 3600) > 3.5,
+            age_hours=round(_age_hours(item.created_at), 1),
+            sla_breach=_age_hours(item.created_at) > 3.5,
         )
         for item in items
     ]

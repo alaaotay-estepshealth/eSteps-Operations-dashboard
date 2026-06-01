@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     # Falls back to ops DB when empty
     leads_database_url: str = ""
     strategy_dir: str = ""
+    # Optional — enables the AI strategy memo on the Insights view. Missing → memo returns 503.
+    gemini_api_key: str = ""
+    # OpenClaw agent gateway (launch actions / collect data). Missing → OpenClaw endpoints return 503.
+    openclaw_base_url: str = ""
+    openclaw_hook_token: str = ""
 
     @property
     def cors_origins_list(self) -> List[str]:
