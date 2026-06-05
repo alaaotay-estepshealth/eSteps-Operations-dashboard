@@ -332,3 +332,120 @@ def get_meeting(
             for p in prev
         ],
     )
+
+
+# ─── Notes + Tasks CRUD ──────────────────────────────────────────────────────
+
+def _get_booking_or_404(db: Session, booking_id: UUID) -> Booking:
+    b = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return b
+
+
+@router.patch("/{booking_id}/notes", response_model=MeetingNoteData)
+def patch_notes(
+    booking_id: UUID,
+    body: MeetingNoteUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_operator),
+) -> MeetingNoteData:
+    booking = _get_booking_or_404(db, booking_id)
+    note = db.query(MeetingNote).filter(MeetingNote.booking_id == booking_id).first()
+    if note is None:
+        note = MeetingNote(booking_id=booking_id)
+        db.add(note)
+    if body.prep_md is not None:
+        note.prep_md = body.prep_md
+    if body.recap_md is not None:
+        note.recap_md = body.recap_md
+    note.updated_by = getattr(user, "username", None) or getattr(user, "email", None)
+    db.commit()
+    db.refresh(note)
+    _audit(db, user, "meetings.notes.update", str(booking_id),
+           {"prep_changed": body.prep_md is not None, "recap_changed": body.recap_md is not None})
+    _ = booking  # touched for audit context only
+    return _notes_data(note)
+
+
+@router.post("/{booking_id}/tasks", response_model=MeetingTaskRow)
+def create_task(
+    booking_id: UUID,
+    body: MeetingTaskCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_operator),
+) -> MeetingTaskRow:
+    _get_booking_or_404(db, booking_id)
+    next_order = (
+        db.query(MeetingTask.order_index)
+        .filter(MeetingTask.booking_id == booking_id)
+        .order_by(MeetingTask.order_index.desc())
+        .limit(1)
+        .scalar()
+    )
+    task = MeetingTask(
+        booking_id=booking_id,
+        title=body.title.strip(),
+        due_at=body.due_at,
+        assignee=body.assignee,
+        order_index=body.order_index if body.order_index is not None else ((next_order or 0) + 1),
+        created_by=getattr(user, "username", None) or getattr(user, "email", None),
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    _audit(db, user, "meetings.task.create", str(booking_id), {"task_id": str(task.id)})
+    return _task_row(task)
+
+
+@router.patch("/{booking_id}/tasks/{task_id}", response_model=MeetingTaskRow)
+def update_task(
+    booking_id: UUID,
+    task_id: UUID,
+    body: MeetingTaskUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_operator),
+) -> MeetingTaskRow:
+    task = (
+        db.query(MeetingTask)
+        .filter(MeetingTask.id == task_id, MeetingTask.booking_id == booking_id)
+        .first()
+    )
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if body.title is not None:
+        task.title = body.title.strip()
+    if body.due_at is not None:
+        task.due_at = body.due_at
+    if body.assignee is not None:
+        task.assignee = body.assignee
+    if body.order_index is not None:
+        task.order_index = body.order_index
+    if body.done is not None and body.done != task.done:
+        task.done = body.done
+        task.done_at = datetime.now(timezone.utc) if body.done else None
+    db.commit()
+    db.refresh(task)
+    _audit(db, user, "meetings.task.update", str(booking_id),
+           {"task_id": str(task.id), "fields": body.model_dump(exclude_none=True)})
+    return _task_row(task)
+
+
+@router.delete("/{booking_id}/tasks/{task_id}")
+def delete_task(
+    booking_id: UUID,
+    task_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_operator),
+) -> dict:
+    task = (
+        db.query(MeetingTask)
+        .filter(MeetingTask.id == task_id, MeetingTask.booking_id == booking_id)
+        .first()
+    )
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    db.delete(task)
+    db.commit()
+    _audit(db, user, "meetings.task.delete", str(booking_id), {"task_id": str(task_id)})
+    return {"deleted": str(task_id)}
