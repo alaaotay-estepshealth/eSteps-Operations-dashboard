@@ -297,17 +297,20 @@ def get_meeting(
     booking_id: UUID,
     db: Session = Depends(get_db),
     leads_db: Session = Depends(get_leads_db),
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ) -> MeetingDetail:
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
-    lead = _lead_summary(leads_db, booking.lead_id)
-    if lead is None:
-        lead = MeetingLeadSummary(lead_id=booking.lead_id, name="(lead not found)")
+    lead = _lead_summary(leads_db, booking.lead_id) or MeetingLeadSummary(
+        lead_id=booking.lead_id, name="(lead not found)"
+    )
 
-    note = db.query(MeetingNote).filter(MeetingNote.booking_id == booking_id).first()
+    note, skipped = _try_autodraft(
+        db, booking, lead, actor=getattr(user, "username", None) or getattr(user, "email", None)
+    )
+
     tasks = (
         db.query(MeetingTask)
         .filter(MeetingTask.booking_id == booking_id)
@@ -322,10 +325,17 @@ def get_meeting(
         .all()
     )
 
+    notes_payload = _notes_data(note)
+    if skipped:
+        notes_payload = MeetingNoteData(
+            **notes_payload.model_dump(),
+        )
+        notes_payload.ai_skipped = skipped
+
     return MeetingDetail(
         booking=_booking_summary(booking),
         lead=lead,
-        notes=_notes_data(note),
+        notes=notes_payload,
         tasks=[_task_row(t) for t in tasks],
         previous_meetings=[
             PreviousMeeting(booking_id=p.id, scheduled_for=p.scheduled_for, status=p.status)
@@ -449,3 +459,119 @@ def delete_task(
     db.commit()
     _audit(db, user, "meetings.task.delete", str(booking_id), {"task_id": str(task_id)})
     return {"deleted": str(task_id)}
+
+
+# ─── AI auto-draft (Task 8) ─────────────────────────────────────────────────
+
+
+class AIDraftBody(BaseModel):
+    force: bool = False
+
+
+_DRAFT_INSTRUCTION = (
+    "Draft a concise 20-min discovery-call prep note in markdown for an eSteps "
+    "Health partnership rep. Sections: **Why this lead matters** (1-2 lines), "
+    "**Key questions to ask** (3-5 bullets, research-anchored), "
+    "**Talking points** (3 bullets tying eSteps capabilities to their research), "
+    "**Watch-outs** (1-2 sensitivities), **Next-step ask** (one concrete CTA). "
+    "No filler. No hallucinated citations."
+)
+
+
+def _prep_prompt(lead: MeetingLeadSummary, booking: Booking) -> str:
+    hours_until = "—"
+    if booking.scheduled_for:
+        delta = (booking.scheduled_for - datetime.now(timezone.utc)).total_seconds() / 3600
+        hours_until = f"{delta:.1f}"
+    parts = [
+        _DRAFT_INSTRUCTION,
+        "",
+        f"Lead: {lead.name or '—'}, {lead.title or '—'} @ {lead.institution or '—'}",
+        f"Research area: {lead.research_area or '—'}   "
+        f"Score: {lead.lead_score if lead.lead_score is not None else '—'}/10   "
+        f"Stage: {lead.stage or '—'}",
+    ]
+    if lead.bio_excerpt:
+        parts.append(f"Bio excerpt: {lead.bio_excerpt}")
+    if lead.last_inbound_excerpt:
+        parts.append(f"Last inbound reply: {lead.last_inbound_excerpt}")
+    parts.append(f"Meeting in {hours_until} hours · duration {booking.duration_min or 20} min")
+    return "\n".join(parts)
+
+
+def _try_autodraft(
+    db: Session,
+    booking: Booking,
+    lead: MeetingLeadSummary,
+    *,
+    force: bool = False,
+    actor: str | None = None,
+) -> tuple[MeetingNote, Optional[str]]:
+    """Return (note, ai_skipped_reason). Never raises Gemini errors upstream."""
+    note = db.query(MeetingNote).filter(MeetingNote.booking_id == booking.id).first()
+    needs_draft = force or (note is None) or (note.ai_drafted_at is None and (note.prep_md or "") == "")
+    if not needs_draft:
+        return note, None  # type: ignore[return-value]
+
+    if gemini_today_spend_usd(db) >= settings.ai_daily_budget_usd and not force:
+        if note is None:
+            note = MeetingNote(booking_id=booking.id)
+            db.add(note)
+            db.commit()
+            db.refresh(note)
+        return note, "budget_exhausted"
+
+    prompt = _prep_prompt(lead, booking)
+    try:
+        text_out = call_gemini(prompt)
+    except HTTPException:
+        if note is None:
+            note = MeetingNote(booking_id=booking.id)
+            db.add(note)
+            db.commit()
+            db.refresh(note)
+        return note, "upstream_error"
+
+    if note is None:
+        note = MeetingNote(booking_id=booking.id, prep_md=text_out)
+        db.add(note)
+    else:
+        note.prep_md = text_out
+    note.ai_drafted_at = datetime.now(timezone.utc)
+    note.ai_model = GEMINI_MODEL
+    note.updated_by = actor or "system_ai"
+    db.commit()
+    db.refresh(note)
+
+    record_decision_row(
+        db,
+        request_type="meeting_prep",
+        request_payload={"booking_id": str(booking.id), "lead_id": str(booking.lead_id)},
+        response_payload={"chars": len(text_out)},
+        cost_estimate_usd=cost_per_call_usd(),
+    )
+    return note, None
+
+
+@router.post("/{booking_id}/ai-draft", response_model=MeetingNoteData)
+def force_ai_draft(
+    booking_id: UUID,
+    body: AIDraftBody,
+    db: Session = Depends(get_db),
+    leads_db: Session = Depends(get_leads_db),
+    user: User = Depends(require_operator),
+) -> MeetingNoteData:
+    if body.force and getattr(user, "role", "") != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required for force=true")
+    booking = _get_booking_or_404(db, booking_id)
+    lead = _lead_summary(leads_db, booking.lead_id) or MeetingLeadSummary(
+        lead_id=booking.lead_id, name="(lead not found)"
+    )
+    note, skipped = _try_autodraft(
+        db, booking, lead, force=body.force,
+        actor=getattr(user, "username", None) or getattr(user, "email", None),
+    )
+    payload = _notes_data(note)
+    if skipped:
+        payload.ai_skipped = skipped
+    return payload
