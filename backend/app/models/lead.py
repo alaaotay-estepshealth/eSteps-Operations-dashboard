@@ -20,6 +20,8 @@ class Lead(Base):
     email = Column(String(255), unique=True, index=True)
     institution = Column(String(255))
     position = Column(String(100))
+    title = Column(String(255), nullable=True)
+    bio = Column(Text, nullable=True)
 
     # Research profile
     research_interest = Column(String(50), index=True)  # parkinsons | gait_analysis | etc.
