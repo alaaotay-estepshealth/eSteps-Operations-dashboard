@@ -93,3 +93,64 @@ def client(db_session):
     test_client = TestClient(app)
     yield test_client
     app.dependency_overrides.clear()
+
+
+# ── ES-OPS-09-MEET-NOTES additions (Task 5) ───────────────────────────────────
+from sqlalchemy.orm import Session
+
+from app.auth import create_access_token
+from app.database import get_leads_db
+
+
+@pytest.fixture()
+def db(db_session):
+    """Alias of `db_session` so tests can use a shorter name."""
+    return db_session
+
+
+@pytest.fixture()
+def admin_token(db_session):
+    """Create an admin User row + JWT. get_current_user looks the user up by sub."""
+    existing = db_session.query(User).filter(User.username == "test-admin").first()
+    if not existing:
+        db_session.add(
+            User(
+                username="test-admin",
+                email="test-admin@example.com",
+                hashed_password="x",
+                role="admin",
+                is_active=True,
+            )
+        )
+        db_session.commit()
+    return create_access_token({"sub": "test-admin", "role": "admin"})
+
+
+@pytest.fixture()
+def operator_token(db_session):
+    existing = db_session.query(User).filter(User.username == "test-op").first()
+    if not existing:
+        db_session.add(
+            User(
+                username="test-op",
+                email="test-op@example.com",
+                hashed_password="x",
+                role="operator",
+                is_active=True,
+            )
+        )
+        db_session.commit()
+    return create_access_token({"sub": "test-op", "role": "operator"})
+
+
+@pytest.fixture()
+def leads_db():
+    gen = get_leads_db()
+    db: Session = next(gen)
+    try:
+        yield db
+    finally:
+        try:
+            next(gen)
+        except StopIteration:
+            pass
