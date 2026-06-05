@@ -525,3 +525,121 @@ class AIDecisionIngest(BaseModel):
     used_fallback: bool = False
     fallback_reason: Optional[str] = None
     status: Optional[str] = None                    # omit → auto: <0.70 conf routes to pending_review
+
+
+# ── Meeting notes & tasks ──────────────────────────────────────────────────
+
+class MeetingTaskRow(BaseModel):
+    id: UUID
+    booking_id: UUID
+    title: str
+    done: bool
+    done_at: Optional[datetime] = None
+    due_at: Optional[datetime] = None
+    assignee: Optional[str] = None
+    order_index: int
+    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    overdue_by_hours: Optional[float] = None
+
+
+class MeetingTaskCreate(BaseModel):
+    title: str
+    due_at: Optional[datetime] = None
+    assignee: Optional[str] = None
+    order_index: Optional[int] = None
+
+
+class MeetingTaskUpdate(BaseModel):
+    title: Optional[str] = None
+    done: Optional[bool] = None
+    due_at: Optional[datetime] = None
+    assignee: Optional[str] = None
+    order_index: Optional[int] = None
+
+
+class MeetingNoteData(BaseModel):
+    prep_md: str
+    recap_md: str
+    ai_drafted_at: Optional[datetime] = None
+    ai_model: Optional[str] = None
+    ai_skipped: Optional[str] = None  # "budget_exhausted" | "upstream_error" | None
+    updated_by: Optional[str] = None
+    updated_at: Optional[datetime] = None
+
+
+class MeetingNoteUpdate(BaseModel):
+    prep_md: Optional[str] = None
+    recap_md: Optional[str] = None
+
+
+class MeetingLeadSummary(BaseModel):
+    lead_id: UUID
+    name: Optional[str] = None
+    institution: Optional[str] = None
+    title: Optional[str] = None
+    research_area: Optional[str] = None
+    lead_score: Optional[float] = None
+    stage: Optional[str] = None
+    bio_excerpt: Optional[str] = None
+    last_inbound_at: Optional[datetime] = None
+    last_inbound_excerpt: Optional[str] = None
+
+
+class MeetingBookingSummary(BaseModel):
+    id: UUID
+    lead_id: UUID
+    title: Optional[str] = None
+    status: str
+    scheduled_for: Optional[datetime] = None
+    duration_min: Optional[int] = None
+    meeting_url: Optional[str] = None
+    source: Optional[str] = None
+    rescheduled_from: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    canceled_at: Optional[datetime] = None
+    no_show_detected: bool = False
+
+
+class PreviousMeeting(BaseModel):
+    booking_id: UUID
+    scheduled_for: Optional[datetime] = None
+    status: str
+
+
+class MeetingDetail(BaseModel):
+    booking: MeetingBookingSummary
+    lead: MeetingLeadSummary
+    notes: MeetingNoteData
+    tasks: List[MeetingTaskRow]
+    previous_meetings: List[PreviousMeeting]
+
+
+class MeetingListItem(BaseModel):
+    booking_id: UUID
+    lead_id: UUID
+    lead_name: Optional[str] = None
+    institution: Optional[str] = None
+    scheduled_for: Optional[datetime] = None
+    status: str
+    open_task_count: int = 0
+    has_notes: bool = False
+    duration_min: Optional[int] = None
+
+
+class MeetingSyncResult(BaseModel):
+    created: int
+    updated: int
+    rescheduled: int
+    skipped: int
+    dry_run: bool
+
+
+class OpenMeetingTaskRow(BaseModel):
+    task_id: UUID
+    booking_id: UUID
+    lead_name: Optional[str] = None
+    title: str
+    due_at: Optional[datetime] = None
+    overdue_by_hours: Optional[float] = None
