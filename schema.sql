@@ -460,3 +460,44 @@ SELECT cron.schedule(
 -- [ ] DATABASE_URL in backend/.env points at this Supabase project's
 --     Transaction Pooler (eu-west-1, IPv4).
 -- =============================================================================
+
+-- ─── Meeting prep (ES-OPS-09-MEET-NOTES, 2026-06-05) ────────────────────────
+
+ALTER TABLE bookings
+  ADD COLUMN IF NOT EXISTS title TEXT,
+  ADD COLUMN IF NOT EXISTS meeting_url TEXT,
+  ADD COLUMN IF NOT EXISTS duration_min INT DEFAULT 20,
+  ADD COLUMN IF NOT EXISTS rescheduled_from TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS ix_bookings_scheduled_for ON bookings(scheduled_for);
+CREATE INDEX IF NOT EXISTS ix_bookings_lead_status   ON bookings(lead_id, status);
+
+CREATE TABLE IF NOT EXISTS meeting_notes (
+  booking_id     UUID PRIMARY KEY REFERENCES bookings(id) ON DELETE CASCADE,
+  prep_md        TEXT NOT NULL DEFAULT '',
+  recap_md       TEXT NOT NULL DEFAULT '',
+  ai_drafted_at  TIMESTAMPTZ,
+  ai_model       TEXT,
+  updated_by     TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS meeting_tasks (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  booking_id   UUID NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+  title        TEXT NOT NULL,
+  done         BOOLEAN NOT NULL DEFAULT FALSE,
+  done_at      TIMESTAMPTZ,
+  due_at       TIMESTAMPTZ,
+  assignee     TEXT,
+  order_index  INT NOT NULL DEFAULT 0,
+  created_by   TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_tasks_booking_order ON meeting_tasks(booking_id, order_index);
+CREATE INDEX IF NOT EXISTS ix_tasks_open_due
+  ON meeting_tasks(due_at)
+  WHERE done = FALSE AND due_at IS NOT NULL;
