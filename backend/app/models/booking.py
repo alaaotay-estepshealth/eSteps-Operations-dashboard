@@ -1,7 +1,8 @@
-from sqlalchemy import Boolean, Column, DateTime, String, ForeignKey
+import uuid
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
-import uuid
 
 from app.database import Base
 
@@ -21,3 +22,9 @@ class Booking(Base):
     no_show_detected = Column(Boolean, default=False)
     source = Column(String(50), nullable=True)
     external_id = Column(String(100), nullable=True)
+
+    # ES-OPS-09-MEET-NOTES additions
+    title = Column(Text, nullable=True)
+    meeting_url = Column(Text, nullable=True)
+    duration_min = Column(Integer, default=20)
+    rescheduled_from = Column(DateTime(timezone=True), nullable=True)

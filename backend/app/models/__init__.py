@@ -10,6 +10,8 @@ from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.models.strategy_asset import StrategyAsset
 from app.models.meet_asset import MeetAsset
+from app.models.meeting_note import MeetingNote
+from app.models.meeting_task import MeetingTask
 
 __all__ = [
 	"System",
@@ -24,4 +26,6 @@ __all__ = [
 	"User",
 	"StrategyAsset",
 	"MeetAsset",
+	"MeetingNote",
+	"MeetingTask",
 ]
