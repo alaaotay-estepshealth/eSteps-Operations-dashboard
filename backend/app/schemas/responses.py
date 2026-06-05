@@ -459,6 +459,25 @@ class StrategyContent(BaseModel):
     content: str
 
 
+class StrategyTreeNode(BaseModel):
+    name: str
+    type: str  # "folder" | "file"
+    path: str
+    size_bytes: int = 0
+    modified_at: Optional[datetime] = None
+    is_text: bool = False  # true for .md/.txt — frontend renders inline; else download
+    children: Optional[List["StrategyTreeNode"]] = None
+
+
+StrategyTreeNode.model_rebuild()
+
+
+class StrategyUploadResult(BaseModel):
+    uploaded: List[str]
+    skipped: List[str] = []
+    folder: str
+
+
 # ─── Pipeline Paginated ──────────────────────────────────────────────────────
 
 class PaginatedLeads(BaseModel):

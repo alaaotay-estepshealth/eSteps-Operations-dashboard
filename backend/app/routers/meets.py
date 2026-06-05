@@ -1,19 +1,19 @@
-"""GTM Strategy file explorer + uploader — fully Supabase-backed.
+"""Meeting-prep file explorer + uploader — fully Supabase-backed.
 
 Every folder and file lives in the `strategy_assets` table on the ops DB. The
-configured `STRATEGY_DIR` (disk) is only used as a one-shot seed source: when
+configured `MEET_DIR` (disk) is only used as a one-shot seed source: when
 the table is empty AND the directory has content, we walk it once and import.
 After that, all CRUD goes to the DB and survives container/volume churn.
 
 Endpoints
-  GET    /admin/gtm/strategies          → flat list (legacy compat)
-  GET    /admin/gtm/tree                → nested tree, single root
-  GET    /admin/gtm/strategy/{path}     → read a text file
-  GET    /admin/gtm/download/{path}     → any file → bytes
-  POST   /admin/gtm/upload              → multipart files
-  POST   /admin/gtm/folder              → empty folder
-  DELETE /admin/gtm/{path}              → file or folder (recursive)
-  POST   /admin/gtm/sync                → admin-only: re-walk STRATEGY_DIR and
+  GET    /admin/meets/strategies          → flat list (legacy compat)
+  GET    /admin/meets/tree                → nested tree, single root
+  GET    /admin/meets/strategy/{path}     → read a text file
+  GET    /admin/meets/download/{path}     → any file → bytes
+  POST   /admin/meets/upload              → multipart files
+  POST   /admin/meets/folder              → empty folder
+  DELETE /admin/meets/{path}              → file or folder (recursive)
+  POST   /admin/meets/sync                → admin-only: re-walk MEET_DIR and
                                           insert anything missing (idempotent)
 """
 import io
@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session, defer
 from app.auth import require_admin
 from app.config import settings
 from app.database import engine, get_db
-from app.models.strategy_asset import StrategyAsset
+from app.models.meet_asset import MeetAsset
 from app.models.user import User
 from app.schemas.responses import (
     StrategyContent,
@@ -40,10 +40,10 @@ from app.schemas.responses import (
     StrategyUploadResult,
 )
 
-router = APIRouter(prefix="/admin/gtm", tags=["gtm-strategy"])
+router = APIRouter(prefix="/admin/meets", tags=["meet-prep"])
 
 # The single user-visible root in the tree.
-ROOT_LABEL = "GTM Strategy"
+ROOT_LABEL = "Meet Prep"
 
 _TEXT_EXTENSIONS = {".md", ".txt", ".rst", ".json", ".yaml", ".yml", ".csv"}
 _ALLOWED_UPLOAD = {
@@ -69,7 +69,7 @@ _SEED_MAX_PER_DIR = 250
 
 # Ensure the table exists at import time (cheap, idempotent).
 try:
-    StrategyAsset.__table__.create(bind=engine, checkfirst=True)
+    MeetAsset.__table__.create(bind=engine, checkfirst=True)
 except Exception:  # pragma: no cover — db may be unreachable at import time
     pass
 
@@ -109,7 +109,7 @@ def _strip_root_prefix(path: str) -> str:
     return p[len(prefix):]
 
 
-def _asset_node(a: StrategyAsset, children: Optional[List[StrategyTreeNode]] = None) -> StrategyTreeNode:
+def _asset_node(a: MeetAsset, children: Optional[List[StrategyTreeNode]] = None) -> StrategyTreeNode:
     return StrategyTreeNode(
         name=a.name,
         type="folder" if a.is_folder else "file",
@@ -123,8 +123,8 @@ def _asset_node(a: StrategyAsset, children: Optional[List[StrategyTreeNode]] = N
 
 def _build_tree(db: Session) -> StrategyTreeNode:
     # Defer the content BLOB — we only need metadata for the tree.
-    rows: List[StrategyAsset] = (
-        db.query(StrategyAsset).options(defer(StrategyAsset.content)).all()
+    rows: List[MeetAsset] = (
+        db.query(MeetAsset).options(defer(MeetAsset.content)).all()
     )
     by_parent: dict = {}
     for r in rows:
@@ -160,13 +160,13 @@ def _ensure_parents(db: Session, rel_path: str, uploader: str) -> None:
     accum = ""
     for seg in parts:
         accum = f"{accum}/{seg}" if accum else seg
-        existing = db.query(StrategyAsset).filter(StrategyAsset.relative_path == accum).first()
+        existing = db.query(MeetAsset).filter(MeetAsset.relative_path == accum).first()
         if existing:
             if not existing.is_folder:
                 raise HTTPException(status_code=409, detail=f"`{accum}` exists as a file")
             continue
         parent = "/".join(accum.split("/")[:-1])
-        db.add(StrategyAsset(
+        db.add(MeetAsset(
             relative_path=accum,
             parent_path=parent,
             name=accum.split("/")[-1],
@@ -179,11 +179,11 @@ def _ensure_parents(db: Session, rel_path: str, uploader: str) -> None:
 # ─── Disk → DB seed ──────────────────────────────────────────────────────────
 
 def _disk_seed_roots() -> List[Path]:
-    """Roots configured in STRATEGY_DIR — used only for the one-shot seed."""
+    """Roots configured in MEET_DIR — used only for the one-shot seed."""
     out: List[Path] = []
-    if not settings.strategy_dir:
+    if not settings.meet_dir:
         return out
-    for d in settings.strategy_dir.split(";"):
+    for d in settings.meet_dir.split(";"):
         p = Path(d.strip())
         if p.exists() and p.is_dir():
             out.append(p)
@@ -191,7 +191,7 @@ def _disk_seed_roots() -> List[Path]:
 
 
 def _seed_from_disk(db: Session, *, uploader: str = "system_seed") -> int:
-    """Walk every STRATEGY_DIR root and insert missing assets. Returns # rows added.
+    """Walk every MEET_DIR root and insert missing assets. Returns # rows added.
 
     The walk may produce duplicate folder paths (multiple roots; parent
     rebuilds). We dedupe via an in-memory `seen` set seeded with the rows
@@ -202,7 +202,7 @@ def _seed_from_disk(db: Session, *, uploader: str = "system_seed") -> int:
         return 0
 
     seen: set = {
-        r[0] for r in db.query(StrategyAsset.relative_path).all()
+        r[0] for r in db.query(MeetAsset.relative_path).all()
     }
 
     def _add_folder(rel_sane: str) -> int:
@@ -216,7 +216,7 @@ def _seed_from_disk(db: Session, *, uploader: str = "system_seed") -> int:
             if accum in seen:
                 continue
             parent = "/".join(accum.split("/")[:-1])
-            db.add(StrategyAsset(
+            db.add(MeetAsset(
                 relative_path=accum,
                 parent_path=parent,
                 name=accum.split("/")[-1],
@@ -227,7 +227,7 @@ def _seed_from_disk(db: Session, *, uploader: str = "system_seed") -> int:
             seen.add(accum)
             ancestors_added += 1
         parent = "/".join(rel_sane.split("/")[:-1])
-        db.add(StrategyAsset(
+        db.add(MeetAsset(
             relative_path=rel_sane,
             parent_path=parent,
             name=rel_sane.split("/")[-1],
@@ -280,7 +280,7 @@ def _seed_from_disk(db: Session, *, uploader: str = "system_seed") -> int:
                     if accum in seen:
                         continue
                     parent = "/".join(accum.split("/")[:-1])
-                    db.add(StrategyAsset(
+                    db.add(MeetAsset(
                         relative_path=accum,
                         parent_path=parent,
                         name=accum.split("/")[-1],
@@ -292,7 +292,7 @@ def _seed_from_disk(db: Session, *, uploader: str = "system_seed") -> int:
                     added += 1
                 parent = "/".join(rel_sane.split("/")[:-1])
                 mime = mimetypes.guess_type(fname)[0] or "application/octet-stream"
-                db.add(StrategyAsset(
+                db.add(MeetAsset(
                     relative_path=rel_sane,
                     parent_path=parent,
                     name=rel_sane.split("/")[-1],
@@ -310,7 +310,7 @@ def _seed_from_disk(db: Session, *, uploader: str = "system_seed") -> int:
 
 def _ensure_seeded(db: Session) -> None:
     """Seed on first access — only when the DB is empty and a disk root is configured."""
-    if db.query(StrategyAsset).limit(1).count() > 0:
+    if db.query(MeetAsset).limit(1).count() > 0:
         return
     _seed_from_disk(db)
 
@@ -324,7 +324,7 @@ def list_strategies(
 ) -> List[StrategyFile]:
     _ensure_seeded(db)
     out: List[StrategyFile] = []
-    for a in db.query(StrategyAsset).options(defer(StrategyAsset.content)).filter(StrategyAsset.is_folder.is_(False)).all():
+    for a in db.query(MeetAsset).options(defer(MeetAsset.content)).filter(MeetAsset.is_folder.is_(False)).all():
         if not _is_text_name(a.name):
             continue
         directory = f"{ROOT_LABEL}/{a.parent_path}" if a.parent_path else ROOT_LABEL
@@ -354,7 +354,7 @@ def get_strategy(
     _: User = Depends(require_admin),
 ) -> StrategyContent:
     rel = _strip_root_prefix(path)
-    asset = db.query(StrategyAsset).filter(StrategyAsset.relative_path == rel).first()
+    asset = db.query(MeetAsset).filter(MeetAsset.relative_path == rel).first()
     if not asset or asset.is_folder:
         raise HTTPException(status_code=404, detail="Strategy file not found")
     if not _is_text_name(asset.name):
@@ -370,7 +370,7 @@ def download_strategy(
     _: User = Depends(require_admin),
 ):
     rel = _strip_root_prefix(path)
-    asset = db.query(StrategyAsset).filter(StrategyAsset.relative_path == rel).first()
+    asset = db.query(MeetAsset).filter(MeetAsset.relative_path == rel).first()
     if not asset or asset.is_folder:
         raise HTTPException(status_code=404, detail="File not found")
     return StreamingResponse(
@@ -429,7 +429,7 @@ async def upload_files(
 
         try:
             _ensure_parents(db, rel_path, user.username)
-            existing = db.query(StrategyAsset).filter(StrategyAsset.relative_path == rel_path).first()
+            existing = db.query(MeetAsset).filter(MeetAsset.relative_path == rel_path).first()
             mime = f.content_type or mimetypes.guess_type(name)[0] or "application/octet-stream"
             if existing:
                 if existing.is_folder:
@@ -440,7 +440,7 @@ async def upload_files(
                 existing.mime_type = mime
                 existing.uploaded_by = user.username
             else:
-                db.add(StrategyAsset(
+                db.add(MeetAsset(
                     relative_path=rel_path,
                     parent_path=rel_dir,
                     name=name,
@@ -470,7 +470,7 @@ def create_folder(
     rel = _sanitize_relpath(_strip_root_prefix(path))
     if not rel:
         raise HTTPException(status_code=400, detail="Folder name required")
-    existing = db.query(StrategyAsset).filter(StrategyAsset.relative_path == rel).first()
+    existing = db.query(MeetAsset).filter(MeetAsset.relative_path == rel).first()
     if existing:
         if existing.is_folder:
             return _asset_node(existing, [])
@@ -479,7 +479,7 @@ def create_folder(
     # iterates `rel.split("/")[:-1]`. We then add the leaf folder ourselves.
     _ensure_parents(db, rel, user.username)
     parent = "/".join(rel.split("/")[:-1])
-    asset = StrategyAsset(
+    asset = MeetAsset(
         relative_path=rel,
         parent_path=parent,
         name=rel.split("/")[-1],
@@ -511,7 +511,7 @@ def delete_node(
     if not rel:
         raise HTTPException(status_code=400, detail="Cannot delete the root")
 
-    asset = db.query(StrategyAsset).filter(StrategyAsset.relative_path == rel).first()
+    asset = db.query(MeetAsset).filter(MeetAsset.relative_path == rel).first()
     if not asset:
         raise HTTPException(status_code=404, detail=f"Asset not found: {rel}")
 
@@ -522,10 +522,10 @@ def delete_node(
             # Escape LIKE meta-chars so names with '_' or '%' don't act as wildcards.
             escaped = rel.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
             affected = (
-                db.query(StrategyAsset)
+                db.query(MeetAsset)
                 .filter(
-                    (StrategyAsset.relative_path == rel)
-                    | (StrategyAsset.relative_path.like(f"{escaped}/%", escape="\\"))
+                    (MeetAsset.relative_path == rel)
+                    | (MeetAsset.relative_path.like(f"{escaped}/%", escape="\\"))
                 )
                 .delete(synchronize_session=False)
             )
@@ -545,7 +545,7 @@ def sync_from_disk(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> dict:
-    """Re-walk every STRATEGY_DIR root and add anything not yet in the DB."""
+    """Re-walk every MEET_DIR root and add anything not yet in the DB."""
     added = _seed_from_disk(db, uploader="manual_sync")
-    total = db.query(StrategyAsset).count()
+    total = db.query(MeetAsset).count()
     return {"added": added, "total_assets": total, "roots": [str(p) for p in _disk_seed_roots()]}

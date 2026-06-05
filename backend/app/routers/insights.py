@@ -239,12 +239,16 @@ def _build_prompt(facts: dict) -> str:
     recs = "; ".join(r["title"] for r in facts["recommendations"])
     fu = facts["followups"]
     seq = " → ".join(f"{s['count']}" for s in facts["sequence_funnel"])
+    today = datetime.utcnow().strftime("%A, %d %B %Y")
     return (
         "You are a GTM operations strategist for eSteps Health (medical-device + RPM, plus Mitus AI sports and "
         "eSteps Studio dev partnerships). Targets: reply >8%, meeting >3%, 100-150 leads/week, score>=7 = hot/MQL "
         "(24h handoff). Write a concise weekly strategy memo in markdown with four short sections: "
         "**Current state**, **Predicted risks**, **Recommended fixes**, **Top 3 focus this week**. "
-        "Be specific and reference the numbers. Do not invent data.\n\n"
+        "Be specific and reference the numbers. Do not invent data. "
+        "Do NOT use any placeholders like [Current Date], [TBD], or [X]. "
+        f"Start the memo with a level-1 heading and the line `**Date:** {today}`.\n\n"
+        f"Today is {today}.\n"
         f"KPIs vs targets: {kpis}\n"
         f"Sequence reach (E1→E5): {seq}\n"
         f"Follow-ups: {fu['overdue']} overdue, {fu['upcoming']} upcoming, {fu['meetings']} meetings\n"

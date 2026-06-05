@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-8 max-w-screen-xl">
+  <div class="space-y-8 max-w-none">
 
     <div class="flex items-center gap-2">
       <RouterLink to="/systems" class="text-ctrl-dim hover:text-ctrl-muted active:scale-[0.97] text-xs transition-all duration-150">

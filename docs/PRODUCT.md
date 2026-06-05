@@ -12,6 +12,14 @@ eSteps Health operations team (1-5 people). Primary user: a solo operator checki
 
 AI-powered lead generation operations control center. Tracks 972 academic researchers through a 5-touch outreach pipeline (new, introduced, pitching, call_requested, cold), monitors n8n workflow executions, surfaces AI decision confidence and human review queues, and logs all system activity. Success = operator makes better decisions faster and never misses a bottleneck.
 
+## Operational Strategy (Best Practice)
+
+1. **n8n is the source of truth for Gmail + workflow runs.** The dashboard never polls Gmail or n8n directly.
+2. **Push everything into the ops DB via webhooks.** Every workflow ends with `POST /webhooks/{slug}`; every AI step posts decisions to `POST /webhooks/{slug}/ai-decision`.
+3. **Lead data is read-only in the dashboard.** n8n writes `email_logs`, `conversations`, and `opportunities` in the leads Supabase DB; the dashboard only reads. Carve-out: the dashboard writes operator-authored meeting prep (`bookings` + `meeting_notes` + `meeting_tasks` in the **ops** DB) — these are operator artefacts, not lead-pipeline state, so they live alongside `audit_logs` rather than in the leads source.
+4. **EST-3 is the reply hub.** It should log inbound/outbound emails to the leads DB, then post AI decision metadata (confidence, model, cost, latency) to the ops webhook.
+5. **Reliability over elegance.** Use HMAC per system, retry webhook posts, and dedupe using `execution_id` / `decision_id`. Keep data freshness visible to the operator.
+
 ## Brand Personality
 
 Precise, Focused, Trustworthy. Voice is direct and informative: no marketing speak, no decorative noise. Every element earns its place by conveying signal. Feels like a professional instrument, not a product demo.

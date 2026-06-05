@@ -8,7 +8,7 @@
             ? 'bg-status-info-bg text-status-info border border-status-info'
             : 'bg-ctrl-panel text-ctrl-text border border-ctrl-border'"
         >
-          <pre v-if="m.role === 'assistant'" class="whitespace-pre-wrap font-sans leading-relaxed">{{ m.text }}</pre>
+          <Markdown v-if="m.role === 'assistant'" :source="m.text" />
           <span v-else>{{ m.text }}</span>
         </div>
       </div>
@@ -39,6 +39,7 @@
 import { ref } from 'vue'
 import { Send } from 'lucide-vue-next'
 import { adminAPI } from '../api/index.js'
+import Markdown from './ui/Markdown.vue'
 
 const messages = ref([])
 const input    = ref('')

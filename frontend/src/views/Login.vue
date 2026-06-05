@@ -5,7 +5,7 @@
 
     <div class="relative w-full max-w-xs">
       <div class="mb-8 flex items-center gap-3">
-        <img src="/logo_inversed.png" alt="eSteps" class="w-12 h-12 object-contain flex-shrink-0" draggable="false" />
+        <img src="/logo_inversed.png" alt="eSteps" class="h-14 w-auto object-contain flex-shrink-0" draggable="false" />
         <div>
           <div class="font-display font-bold text-2xl tracking-wide text-ctrl-text leading-tight">eSteps</div>
           <div class="text-2xs text-ctrl-muted uppercase tracking-label mt-1">Operations Dashboard</div>
@@ -61,7 +61,6 @@
         </form>
       </div>
 
-      <p class="text-center text-2xs text-ctrl-dim mt-5">Demo: admin / admin123</p>
     </div>
   </div>
 </template>

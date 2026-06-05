@@ -8,6 +8,8 @@ from app.models.workflow_execution import WorkflowExecution
 from app.models.ai_request import AIRequest
 from app.models.audit_log import AuditLog
 from app.models.user import User
+from app.models.strategy_asset import StrategyAsset
+from app.models.meet_asset import MeetAsset
 
 __all__ = [
 	"System",
@@ -20,4 +22,6 @@ __all__ = [
 	"AIRequest",
 	"AuditLog",
 	"User",
+	"StrategyAsset",
+	"MeetAsset",
 ]

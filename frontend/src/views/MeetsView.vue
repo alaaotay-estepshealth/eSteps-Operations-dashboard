@@ -11,14 +11,14 @@
     </div>
 
     <StatRow :stats="[
-      { label: 'Products',     value: 3,                sub: 'eSteps Health · Mitus AI · Robosan' },
-      { label: 'Strategy Docs', value: fileCount,       sub: 'across all roots' },
-      { label: 'Folders',       value: folderCount },
+      { label: 'Products',     value: 3,                sub: 'eSteps Health  briefings' },
+      { label: 'Documents', value: fileCount,       sub: 'in this archive' },
+      { label: 'Meetings',       value: folderCount },
     ]" />
 
     <!-- Magazine-style layout: tree floats left; viewer flows around it AND
          reclaims full width once the tree column ends below. -->
-    <SectionContainer :title="selectedNode?.name ?? 'GTM Strategy'" :subtitle="selectedNode?.path ?? 'Folders, subfolders and files'">
+    <SectionContainer :title="selectedNode?.name ?? 'Meet Prep'" :subtitle="selectedNode?.path ?? 'Per-meeting folders and supporting files'">
       <template #action v-if="selectedNode">
         <a
           :href="downloadHref"
@@ -33,7 +33,7 @@
         <!-- Floated tree column (top-left). Viewer text wraps to its right and below. -->
         <aside class="gtm-tree-col bg-ctrl-panel/60 border border-ctrl-border rounded p-3">
           <div class="flex items-center justify-between gap-2 mb-2">
-            <div class="font-display text-2xs uppercase tracking-label text-ctrl-muted">Strategy Documents</div>
+            <div class="font-display text-2xs uppercase tracking-label text-ctrl-muted">Meeting Materials</div>
             <div v-if="canWrite" class="flex items-center gap-1">
               <button
                 @click="triggerFileUpload"
@@ -84,7 +84,7 @@
             <div v-for="i in 6" :key="i" class="h-5 bg-ctrl-raised rounded animate-pulse" />
           </div>
           <div v-else-if="!tree.length">
-            <EmptyState :icon="FolderOpen" message="No strategy roots configured" />
+            <EmptyState :icon="FolderOpen" message="No meet-prep root configured" />
           </div>
           <div v-else class="space-y-0.5 max-h-[calc(100vh-340px)] overflow-y-auto pr-1">
             <GTMTreeNode
@@ -105,7 +105,7 @@
             <div v-for="i in 10" :key="i" class="h-4 bg-ctrl-raised rounded animate-pulse" :style="{ width: `${40 + Math.random() * 50}%` }" />
           </div>
           <div v-else-if="!selectedNode">
-            <EmptyState :icon="FileText" message="Select a strategy document from the tree" />
+            <EmptyState :icon="FileText" message="Select a meet-prep document from the tree" />
           </div>
           <div v-else-if="ext(selectedNode.name) === 'pdf'" class="border border-ctrl-border rounded overflow-hidden bg-ctrl-panel/30">
             <div class="flex items-center justify-between gap-3 px-3 py-2 border-b border-ctrl-border bg-ctrl-panel/60">
@@ -162,9 +162,9 @@
     <PromptDialog
       v-model="folderPromptOpen"
       title="New folder"
-      :label="`Inside ${folderParentLabel || 'GTM Strategy'}`"
-      placeholder="e.g. q3-launch"
-      hint="You can nest with /  →  e.g. campaigns/q3"
+      :label="`Inside ${folderParentLabel || 'Meet Prep'}`"
+      placeholder="e.g. mayo-clinic-2026-06"
+      hint="You can nest with /  →  e.g. dr-elder/brief"
       submit-label="Create folder"
       @submit="onFolderName"
     />
@@ -185,7 +185,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useStaleFetch } from '../composables/useStaleFetch'
 import { AlertCircle, CheckCircle, Download, ExternalLink, FileText, FolderOpen, FolderPlus, Plus, Upload } from 'lucide-vue-next'
-import { gtmAPI } from '../api/index.js'
+import { meetsAPI } from '../api/index.js'
 import { useAuthStore } from '../stores/auth.js'
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
@@ -234,7 +234,7 @@ async function _loadPdf(path) {
   pdfError.value = ''
   pdfLoading.value = true
   try {
-    const blob = await gtmAPI.fetchBlob(path, 'application/pdf')
+    const blob = await meetsAPI.fetchBlob(path, 'application/pdf')
     _pdfBlobUrl = URL.createObjectURL(blob)
     pdfBlobUrl.value = _pdfBlobUrl
   } catch (err) {
@@ -265,7 +265,7 @@ const folderInput = ref(null)
 
 const fileCount = computed(() => countNodes(tree.value, n => n.type === 'file'))
 const folderCount = computed(() => countNodes(tree.value, n => n.type === 'folder') - tree.value.length)
-const downloadHref = computed(() => selectedNode.value ? gtmAPI.downloadUrl(selectedNode.value.path) : '#')
+const downloadHref = computed(() => selectedNode.value ? meetsAPI.downloadUrl(selectedNode.value.path) : '#')
 
 function countNodes(nodes, pred) {
   let n = 0
@@ -298,7 +298,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const { data } = await gtmAPI.getTree()
+    const { data } = await meetsAPI.getTree()
     tree.value = Array.isArray(data) ? data : []
     if (selectedPath.value) {
       const refreshed = findNode(tree.value, selectedPath.value)
@@ -325,7 +325,7 @@ async function selectFile(path) {
   if (!node.is_text) { content.value = ''; return }
   contentLoading.value = true
   try {
-    const { data } = await gtmAPI.getStrategy(path)
+    const { data } = await meetsAPI.getStrategy(path)
     content.value = data.content ?? ''
   } catch {
     content.value = 'Failed to load file content.'
@@ -362,7 +362,7 @@ async function doUpload(files) {
       fd.append('files', f)
       fd.append('paths', f.webkitRelativePath || '')
     }
-    const { data } = await gtmAPI.upload(fd, (p) => {
+    const { data } = await meetsAPI.upload(fd, (p) => {
       if (p.total) uploadProgress.value = Math.round((p.loaded / p.total) * 100)
     })
     flash(`Uploaded ${data.uploaded.length}${data.skipped.length ? ` · skipped ${data.skipped.length}` : ''}.`)
@@ -400,7 +400,7 @@ async function onFolderName(name) {
   const parent = targetFolderPath()
   if (!parent || !name) return
   try {
-    await gtmAPI.createFolder(`${parent}/${name}`)
+    await meetsAPI.createFolder(`${parent}/${name}`)
     flash('Folder created.')
     await load()
   } catch (err) {
@@ -421,7 +421,7 @@ function onDelete(path) {
     confirmLabel: 'Delete',
     onYes: async () => {
       try {
-        await gtmAPI.remove(path)
+        await meetsAPI.remove(path)
         flash('Deleted.')
         if (selectedPath.value === path || selectedPath.value.startsWith(path + '/')) {
           selectedPath.value = ''

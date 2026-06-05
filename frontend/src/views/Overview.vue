@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-8 max-w-screen-xl">
+  <div class="space-y-8 max-w-none">
 
     <div v-if="error" class="flex items-center gap-3 bg-status-err-bg border border-status-err rounded px-4 py-3 text-status-err text-xs">
       <AlertCircle class="w-4 h-4 flex-shrink-0" />
@@ -16,48 +16,44 @@
         <span class="tabnum text-2xs text-ctrl-dim">{{ metrics.total_leads || 972 }} total leads</span>
       </div>
 
-      <div class="flex items-center gap-1 h-8 rounded overflow-hidden bg-ctrl-border">
+      <!-- Stage bars: one row per stage, width = pct of total leads -->
+      <div class="space-y-2.5">
         <div
-          v-for="(step, i) in funnelSteps"
+          v-for="step in funnelSteps"
           :key="step.label"
-          class="h-full flex items-center justify-center text-2xs font-medium transition-all duration-700 relative group"
-          :class="step.bgClass"
-          :style="{ width: `${Math.max(step.pct, 3)}%` }"
+          class="flex items-center gap-4"
         >
-          <span class="tabnum text-white/90 drop-shadow-sm whitespace-nowrap" v-if="step.pct >= 8">
-            {{ step.count }}
-          </span>
-          <div class="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-ctrl-panel border border-ctrl-border rounded px-2 py-0.5 text-2xs tabnum text-ctrl-text whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-float">
-            {{ step.label }}: {{ step.count }} ({{ step.pct }}%)
+          <div class="flex items-center gap-2 w-36 flex-shrink-0">
+            <span class="w-2 h-2 rounded-full flex-shrink-0" :class="step.dotClass" />
+            <span class="text-xs text-ctrl-muted truncate">{{ step.label }}</span>
           </div>
-        </div>
-      </div>
-
-      <div class="flex justify-between mt-3">
-        <div v-for="step in funnelSteps" :key="`lbl-${step.label}`" class="flex items-center gap-1.5">
-          <span class="w-2 h-2 rounded-full" :class="step.dotClass" />
-          <span class="text-2xs text-ctrl-muted">{{ step.label }}</span>
-          <span class="tabnum text-2xs text-ctrl-text font-medium">{{ step.count }}</span>
+          <div class="flex-1 h-2.5 bg-ctrl-raised rounded-full overflow-hidden">
+            <div
+              class="h-full rounded-full transition-all duration-700"
+              :class="step.bgClass"
+              :style="{ width: `${step.pct}%` }"
+            />
+          </div>
+          <div class="flex items-baseline gap-1.5 w-24 justify-end flex-shrink-0">
+            <span class="tabnum text-sm font-semibold text-ctrl-text">{{ step.count }}</span>
+            <span class="tabnum text-2xs text-ctrl-dim">{{ step.pct }}%</span>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- System Health + KPI strip -->
-    <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6">
-      <StatRow :stats="kpiStats" :revalidating="revalidating" />
+    <!-- KPI strip — full row so labels don't truncate -->
+    <StatRow :stats="kpiStats" :revalidating="revalidating" />
 
-      <!-- System Health dots -->
-      <div class="flex items-center gap-3 bg-ctrl-panel border border-ctrl-border rounded px-4 py-2">
-        <span class="text-2xs text-ctrl-dim uppercase tracking-label font-display">Systems</span>
-        <div v-for="sys in systemHealth" :key="sys.slug" class="flex items-center gap-1.5 group relative">
-          <span class="w-2.5 h-2.5 rounded-full" :class="healthDotClass(sys.status)" />
-          <span class="text-2xs text-ctrl-muted hidden xl:inline">{{ sys.name }}</span>
-          <div class="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-ctrl-panel border border-ctrl-border rounded px-2 py-0.5 text-2xs tabnum whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-10">
-            {{ sys.name }} · {{ sys.last_run_ago || 'no runs' }}
-          </div>
-        </div>
-        <span v-if="!systemHealth.length" class="text-2xs text-ctrl-dim">—</span>
+    <!-- System Health dots — its own row, breathes -->
+    <div class="flex flex-wrap items-center gap-x-5 gap-y-2 bg-ctrl-panel border border-ctrl-border rounded px-4 py-3">
+      <span class="text-2xs text-ctrl-dim uppercase tracking-label font-display">Systems</span>
+      <div v-for="sys in systemHealth" :key="sys.slug" class="flex items-center gap-2 group relative">
+        <span class="w-2 h-2 rounded-full flex-shrink-0" :class="healthDotClass(sys.status)" />
+        <span class="text-xs text-ctrl-muted">{{ sys.name }}</span>
+        <span class="text-2xs text-ctrl-dim tabnum">· {{ sys.last_run_ago || 'no runs' }}</span>
       </div>
+      <span v-if="!systemHealth.length" class="text-2xs text-ctrl-dim">no systems registered</span>
     </div>
 
     <!-- Activity Feed + Pipeline Funnel side by side -->

@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-8 max-w-screen-xl">
+  <div class="space-y-8 max-w-none">
 
     <div v-if="error" class="flex items-center gap-3 bg-status-err-bg border border-status-err rounded px-4 py-3 text-status-err text-xs">
       <AlertCircle class="w-4 h-4 flex-shrink-0" />
@@ -9,19 +9,24 @@
     <!-- What to focus on + AI memo -->
     <SectionContainer title="What to Focus On" subtitle="Recommendations from your GTM targets and live pipeline state">
       <template #action>
-        <button
-          @click="genMemo"
-          :disabled="memoLoading"
-          class="flex items-center gap-2 text-xs border border-status-info text-status-info rounded px-3 py-1.5 hover:bg-status-info-bg disabled:opacity-40 transition-all"
-        >
-          <Sparkles class="w-3.5 h-3.5" :class="{ 'animate-pulse': memoLoading }" />
-          {{ memoLoading ? 'Generating…' : 'Generate strategy memo' }}
-        </button>
+        <div class="flex items-center gap-3">
+          <span v-if="memo && generatedAt" class="text-2xs text-ctrl-dim tabnum hidden sm:inline">
+            Generated {{ memoTimeLabel }}
+          </span>
+          <button
+            @click="genMemo"
+            :disabled="memoLoading"
+            class="flex items-center gap-2 text-xs border border-status-info text-status-info rounded px-3 py-1.5 hover:bg-status-info-bg disabled:opacity-40 transition-all"
+          >
+            <Sparkles class="w-3.5 h-3.5" :class="{ 'animate-pulse': memoLoading }" />
+            {{ memoLoading ? 'Generating…' : memo ? 'Regenerate strategy memo' : 'Generate strategy memo' }}
+          </button>
+        </div>
       </template>
 
       <div v-if="memo || memoError" class="mb-4 rounded border border-ctrl-border bg-ctrl-panel p-4">
         <div v-if="memoError" class="text-xs text-status-warn">{{ memoError }}</div>
-        <pre v-else class="text-xs text-ctrl-text whitespace-pre-wrap font-sans leading-relaxed">{{ memo }}</pre>
+        <Markdown v-else :source="memo" />
       </div>
 
       <div v-if="loading" class="space-y-2">
@@ -214,6 +219,8 @@ import EmptyState from '../components/ui/EmptyState.vue'
 import SectionContainer from '../components/ui/SectionContainer.vue'
 import HeatMap from '../components/ui/HeatMap.vue'
 import AssistantPanel from '../components/AssistantPanel.vue'
+import Markdown from '../components/ui/Markdown.vue'
+import { useDailyMemo } from '../composables/useDailyMemo.js'
 
 const router    = useRouter()
 const data      = ref({ kpis: [], recommendations: [], sequence_funnel: [], score_distribution: [], segments: [], comparison: { metrics: [] }, monthly: [], trend: [], goals: {}, followups: {} })
@@ -234,9 +241,15 @@ const geoPhases = [
   { phase: 'Phase 2 (Q3)', regions: 'UAE · KSA · AU · CA' },
   { phase: 'Phase 3 (Q4)', regions: 'JP · KR · BR' },
 ]
-const memo       = ref('')
-const memoError  = ref('')
-const memoLoading = ref(false)
+const { memo, memoError, memoLoading, generatedAt, genMemo } = useDailyMemo()
+const memoTimeLabel = computed(() => {
+  if (!generatedAt.value) return ''
+  const d = new Date(generatedAt.value)
+  if (Number.isNaN(d.getTime())) return ''
+  const sameDay = d.toDateString() === new Date().toDateString()
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return sameDay ? `at ${time}` : d.toLocaleDateString()
+})
 
 const sequenceBars = computed(() => (data.value.sequence_funnel || []).map((s, i) => ({
   label: s.step.replace('Email ', 'E'), value: s.count,
@@ -253,20 +266,6 @@ function borderFor(s) { return { green: 'border-status-ok', amber: 'border-statu
 function textFor(s) { return { green: 'text-status-ok', amber: 'text-status-warn', red: 'text-status-err' }[s] || 'text-ctrl-text' }
 function sevClass(s) { return { high: 'bg-status-err-bg border-status-err', medium: 'bg-status-warn-bg border-status-warn', info: 'bg-ctrl-panel border-ctrl-border' }[s] || 'bg-ctrl-panel border-ctrl-border' }
 function sevIcon(s) { return { high: AlertCircle, medium: AlertTriangle, info: Info }[s] || Info }
-
-async function genMemo() {
-  memoLoading.value = true
-  memo.value = ''
-  memoError.value = ''
-  try {
-    const { data: d } = await adminAPI.generateMemo()
-    memo.value = d.memo
-  } catch (e) {
-    memoError.value = e.response?.data?.detail || 'Could not generate memo.'
-  } finally {
-    memoLoading.value = false
-  }
-}
 
 async function load() {
   loading.value = true

@@ -8,7 +8,7 @@
         <p class="text-xs text-ctrl-muted mt-1">Generated {{ now }}</p>
       </div>
       <button
-        @click="print"
+        @click="printPage"
         class="px-4 py-2 text-xs font-medium rounded border border-ctrl-border bg-ctrl-panel text-ctrl-text hover:bg-ctrl-raised transition print:hidden"
       >
         Print / Save PDF
@@ -152,7 +152,7 @@ function dotClass(status) {
   return map[status] || 'bg-ctrl-border'
 }
 
-function print() { window.print() }
+function printPage() { window.print() }
 
 async function load() {
   loading.value = true

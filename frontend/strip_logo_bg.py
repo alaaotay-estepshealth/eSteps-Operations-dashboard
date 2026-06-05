@@ -19,4 +19,4 @@ for y in range(h):
             stripped += 1
 
 img.save(DST, "PNG")
-print(f"Stripped {stripped:,} background pixels → {DST}")
+print(f"Stripped {stripped:,} background pixels -> {DST}")

@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-6 max-w-screen-xl">
+  <div class="space-y-6 max-w-none">
 
     <div v-if="error" class="flex items-center gap-3 bg-status-err-bg border border-status-err rounded px-4 py-3 text-status-err text-xs">
       <AlertCircle class="w-4 h-4 flex-shrink-0" />
@@ -50,9 +50,13 @@
     </SectionContainer>
 
     <!-- Detail drawer -->
-    <div v-if="selected" class="fixed inset-0 z-30" @click.self="close">
-      <div class="absolute inset-0 bg-black/50" />
-      <aside class="absolute inset-y-0 right-0 w-full max-w-md bg-ctrl-surface border-l border-ctrl-border overflow-y-auto p-6 space-y-5">
+    <div v-if="selected" class="fixed inset-0 z-30" @keydown.esc="close" tabindex="-1">
+      <!-- Backdrop catches outside-clicks. Aside stops propagation so clicks inside don't bubble up. -->
+      <div class="absolute inset-0 bg-black/50" @click="close" />
+      <aside
+        @click.stop
+        class="absolute inset-y-0 right-0 w-full max-w-md bg-ctrl-surface border-l border-ctrl-border overflow-y-auto p-6 space-y-5"
+      >
         <div class="flex items-start justify-between gap-3">
           <div>
             <div class="font-display font-semibold text-lg text-ctrl-text">{{ selected.lead?.name }}</div>
@@ -67,18 +71,74 @@
           <Badge v-if="selected.lead?.campaign_tag" :variant="selected.lead.campaign_tag === 'Priority_A' ? 'success' : 'info'">{{ selected.lead.campaign_tag }}</Badge>
         </div>
 
-        <div class="grid grid-cols-2 gap-3 text-xs">
-          <div><div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">Email</div><div class="text-ctrl-muted truncate">{{ selected.lead?.email || '—' }}</div></div>
-          <div><div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">Research</div><div class="text-ctrl-muted truncate">{{ selected.lead?.research_interest || '—' }}</div></div>
-          <div><div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">h-index</div><div class="text-ctrl-muted tabnum">{{ selected.lead?.h_index ?? '—' }}</div></div>
-          <div><div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">Touches</div><div class="text-ctrl-muted tabnum">{{ selected.lead?.touch_number ?? 0 }}</div></div>
+        <div>
+          <div class="font-display text-2xs uppercase tracking-label text-ctrl-muted mb-2">Contact</div>
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="col-span-2">
+              <div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">Email</div>
+              <a v-if="selected.lead?.email" :href="`mailto:${selected.lead.email}`" class="text-status-info hover:underline truncate block">{{ selected.lead.email }}</a>
+              <div v-else class="text-ctrl-dim">—</div>
+            </div>
+            <div class="col-span-2">
+              <div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">LinkedIn</div>
+              <a v-if="selected.lead?.linkedin_url" :href="selected.lead.linkedin_url" target="_blank" rel="noopener" class="text-status-info hover:underline truncate block">
+                {{ stripProto(selected.lead.linkedin_url) }} ↗
+              </a>
+              <div v-else class="text-ctrl-dim">—</div>
+            </div>
+            <div>
+              <div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">Phone</div>
+              <a v-if="selected.lead?.phone" :href="`tel:${selected.lead.phone}`" class="text-status-info hover:underline tabnum">{{ selected.lead.phone }}</a>
+              <div v-else class="text-ctrl-dim">—</div>
+            </div>
+            <div>
+              <div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">Website</div>
+              <a v-if="selected.lead?.website" :href="selected.lead.website" target="_blank" rel="noopener" class="text-status-info hover:underline truncate block">{{ stripProto(selected.lead.website) }} ↗</a>
+              <div v-else class="text-ctrl-dim">—</div>
+            </div>
+          </div>
         </div>
 
-        <div v-if="canAct" class="flex flex-wrap gap-1.5 pt-1">
-          <button @click="drawerAct('resume')"     :disabled="acting" class="px-2.5 py-1 text-2xs border border-ctrl-border rounded text-ctrl-muted hover:text-status-ok hover:border-status-ok disabled:opacity-30 transition-all">Reschedule</button>
-          <button @click="drawerAct('pause')"       :disabled="acting" class="px-2.5 py-1 text-2xs border border-ctrl-border rounded text-ctrl-muted hover:text-status-warn hover:border-status-warn disabled:opacity-30 transition-all">Pause</button>
-          <button @click="drawerAct('set_priority', 'Priority_A')" :disabled="acting" class="px-2.5 py-1 text-2xs border border-ctrl-border rounded text-ctrl-muted hover:text-status-ok hover:border-status-ok disabled:opacity-30 transition-all">Bump A</button>
-          <button @click="drawerAct('mark_cold')"   :disabled="acting" class="px-2.5 py-1 text-2xs border border-ctrl-border rounded text-ctrl-muted hover:text-status-err hover:border-status-err disabled:opacity-30 transition-all">Mark Cold</button>
+        <div>
+          <div class="font-display text-2xs uppercase tracking-label text-ctrl-muted mb-2">Profile</div>
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div><div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">Research</div><div class="text-ctrl-muted truncate">{{ selected.lead?.research_interest || '—' }}</div></div>
+            <div><div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">Department</div><div class="text-ctrl-muted truncate">{{ selected.lead?.department || '—' }}</div></div>
+            <div><div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">h-index</div><div class="text-ctrl-muted tabnum">{{ selected.lead?.h_index ?? '—' }}</div></div>
+            <div><div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">Publications</div><div class="text-ctrl-muted tabnum">{{ selected.lead?.publication_count ?? '—' }}</div></div>
+            <div><div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">Touches</div><div class="text-ctrl-muted tabnum">{{ selected.lead?.touch_number ?? 0 }} / 5</div></div>
+            <div><div class="text-ctrl-dim uppercase tracking-label text-2xs mb-0.5">Next send</div><div class="text-ctrl-muted tabnum">{{ fmtDate(selected.lead?.next_send_date) }}</div></div>
+          </div>
+        </div>
+
+        <div v-if="selected.lead?.notes">
+          <div class="font-display text-2xs uppercase tracking-label text-ctrl-muted mb-2">Notes</div>
+          <p class="text-xs text-ctrl-muted whitespace-pre-wrap leading-relaxed bg-ctrl-panel rounded px-3 py-2 border border-ctrl-border">{{ selected.lead.notes }}</p>
+        </div>
+
+        <div v-if="canAct" class="space-y-1.5 pt-1">
+          <div class="flex flex-wrap gap-1.5">
+            <button @click="openSchedule" :disabled="acting" class="px-2.5 py-1 text-2xs bg-status-info-bg text-status-info border border-status-info rounded hover:opacity-85 disabled:opacity-30 transition-all">Schedule meet</button>
+            <button
+              v-if="!isEngaged"
+              @click="drawerAct('set_engaged')"
+              :disabled="acting"
+              class="px-2.5 py-1 text-2xs bg-status-ok-bg text-status-ok border border-status-ok rounded hover:opacity-85 disabled:opacity-30 transition-all"
+            >Set engaged</button>
+            <button
+              v-else
+              @click="drawerAct('unset_engaged')"
+              :disabled="acting"
+              class="px-2.5 py-1 text-2xs bg-status-warn-bg text-status-warn border border-status-warn rounded hover:opacity-85 disabled:opacity-30 transition-all"
+              title="Revert to the previous stage"
+            >Unset engaged</button>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            <button @click="drawerAct('resume')"     :disabled="acting" class="px-2.5 py-1 text-2xs border border-ctrl-border rounded text-ctrl-muted hover:text-status-ok hover:border-status-ok disabled:opacity-30 transition-all">Reschedule</button>
+            <button @click="drawerAct('pause')"       :disabled="acting" class="px-2.5 py-1 text-2xs border border-ctrl-border rounded text-ctrl-muted hover:text-status-warn hover:border-status-warn disabled:opacity-30 transition-all">Pause</button>
+            <button @click="drawerAct('set_priority', 'Priority_A')" :disabled="acting" class="px-2.5 py-1 text-2xs border border-ctrl-border rounded text-ctrl-muted hover:text-status-ok hover:border-status-ok disabled:opacity-30 transition-all">Bump A</button>
+            <button @click="drawerAct('mark_cold')"   :disabled="acting" class="px-2.5 py-1 text-2xs border border-ctrl-border rounded text-ctrl-muted hover:text-status-err hover:border-status-err disabled:opacity-30 transition-all">Mark Cold</button>
+          </div>
         </div>
 
         <div>
@@ -96,6 +156,39 @@
           </ol>
         </div>
       </aside>
+    </div>
+
+    <!-- Schedule meeting modal -->
+    <div v-if="scheduleOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px]" @click.self="scheduleOpen = false">
+      <div class="bg-ctrl-surface border border-ctrl-border rounded-lg shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+        <form @submit.prevent="confirmSchedule">
+          <div class="px-5 pt-5 flex items-start justify-between gap-3">
+            <div>
+              <div class="font-display font-semibold text-base text-ctrl-text leading-tight">Schedule meeting</div>
+              <p class="text-xs text-ctrl-muted mt-1">{{ selected?.lead?.name }} — {{ selected?.lead?.institution }}</p>
+            </div>
+            <button type="button" @click="scheduleOpen = false" class="text-ctrl-dim hover:text-ctrl-text text-lg leading-none">✕</button>
+          </div>
+          <div class="px-5 pt-4 space-y-3">
+            <div>
+              <label class="block text-2xs uppercase tracking-label text-ctrl-dim mb-1">Date &amp; time</label>
+              <input v-model="scheduleAt" type="datetime-local" required
+                class="w-full bg-ctrl-panel border border-ctrl-border rounded text-sm text-ctrl-text px-3 py-2 focus:outline-none focus:border-status-info" />
+            </div>
+            <p class="text-2xs text-ctrl-dim">
+              This sets <span class="font-mono">meeting_scheduled_for</span>, moves the stage to
+              <span class="font-mono">call_requested</span>, and pauses the drip. Audited in ops DB.
+            </p>
+          </div>
+          <div class="flex items-center justify-end gap-2 px-5 py-4 mt-3 bg-ctrl-panel/40 border-t border-ctrl-border">
+            <button type="button" @click="scheduleOpen = false" class="px-3 py-1.5 text-xs border border-ctrl-border rounded text-ctrl-muted hover:text-ctrl-text">Cancel</button>
+            <button type="submit" :disabled="!scheduleAt || acting"
+              class="px-3 py-1.5 text-xs bg-status-info-bg text-status-info border border-status-info rounded hover:opacity-85 disabled:opacity-40 transition-all">
+              {{ acting ? 'Saving…' : 'Schedule' }}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
 
   </div>
@@ -126,8 +219,34 @@ const pageSize = 25
 const selected = ref(null)
 const acting   = ref(false)
 
-const stages = ['new', 'introduced', 'pitching', 'call_requested', 'cold']
+const stages = ['new', 'introduced', 'pitching', 'engaged', 'call_requested', 'cold']
 const filters = ref({ search: '', hot: false, replied: '', stage: '' })
+
+const scheduleOpen = ref(false)
+const scheduleAt   = ref('')
+const isEngaged = computed(() => (selected.value?.lead?.stage || '').toLowerCase() === 'engaged')
+
+function openSchedule() {
+  const existing = selected.value?.lead?.meeting_scheduled_for
+  if (existing) {
+    // datetime-local needs YYYY-MM-DDTHH:MM
+    scheduleAt.value = new Date(existing).toISOString().slice(0, 16)
+  } else {
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    d.setMinutes(0, 0, 0)
+    scheduleAt.value = d.toISOString().slice(0, 16)
+  }
+  scheduleOpen.value = true
+}
+
+async function confirmSchedule() {
+  if (!scheduleAt.value) return
+  // Send as ISO string with Z so Postgres parses it as UTC unambiguously.
+  const iso = new Date(scheduleAt.value).toISOString()
+  await drawerAct('schedule_meeting', iso)
+  scheduleOpen.value = false
+}
 
 const columns = [
   { key: 'name',           label: 'Name' },
@@ -141,6 +260,7 @@ const columns = [
 
 function scoreColor(s) { return s >= 9 ? 'text-status-ok' : s >= 7 ? 'text-status-info' : s >= 5 ? 'text-status-warn' : 'text-ctrl-muted' }
 function scoreVariant(s) { return s >= 9 ? 'success' : s >= 7 ? 'info' : s >= 5 ? 'warning' : 'default' }
+function stripProto(url) { return (url || '').replace(/^https?:\/\//, '').replace(/\/$/, '') }
 function eventDot(t) { return { reply: 'bg-status-ok', meeting: 'bg-status-info', email_sent: 'bg-ctrl-muted', outbound: 'bg-ctrl-dim' }[t] || 'bg-ctrl-muted' }
 function fmtDate(v) { return v ? new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—' }
 function fmtDateTime(v) { return v ? new Date(v).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '' }
@@ -166,12 +286,21 @@ function close() { selected.value = null; router.replace({ path: '/contacts' }) 
 async function drawerAct(action, value = null) {
   if (!selected.value?.lead?.lead_id) return
   acting.value = true
+  error.value = ''
   try {
     await adminAPI.leadAction(selected.value.lead.lead_id, { action, value })
     await open(selected.value.lead.lead_id)
     await load()
-  } catch {
-    error.value = 'Action failed.'
+  } catch (err) {
+    const detail = err?.response?.data?.detail
+    const msg = typeof detail === 'string'
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map(d => d.msg).join(', ')
+        : null
+    error.value = msg
+      ? `Action "${action}" failed: ${msg}`
+      : `Action "${action}" failed (status ${err?.response?.status ?? '?'}). The backend may need a restart to load new actions.`
   } finally {
     acting.value = false
   }

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from sqlalchemy import text
 
-from app.auth import get_current_user, require_admin
+from app.auth import get_current_user, require_admin, require_operator
 from app.database import get_db, get_leads_db
 from app.config import settings
 from app.models.ai_request import AIRequest
@@ -571,29 +571,60 @@ def resolve_review(
     item_id: str,
     resolution: ReviewResolution,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_operator),
 ):
+    """Approve/reject/override an AI decision pending human review.
+
+    - approve    → status="completed", human_verified=True
+    - reject     → status="rejected",  human_verified=False
+    - override   → status="overridden", human_verified=True, human_override=True
+    Per spec (use-case diagram), both admin and operator can resolve.
+    """
+    action = (resolution.action or "").lower().strip()
+    if action not in {"approve", "reject", "override"}:
+        raise HTTPException(status_code=400, detail="action must be approve, reject, or override")
 
     item = db.query(AIRequest).filter(AIRequest.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Review item not found")
 
-    item.human_verified = True
-    item.status = "completed"
-    if resolution.action == "override":
+    if action == "approve":
+        item.status = "completed"
+        item.human_verified = True
+        item.human_override = False
+        audit_level = "INFO"
+    elif action == "reject":
+        item.status = "rejected"
+        item.human_verified = False
+        item.human_override = False
+        audit_level = "WARN"
+    else:  # override
+        item.status = "overridden"
+        item.human_verified = True
         item.human_override = True
-    db.commit()
+        audit_level = "WARN"
+
+    notes = (resolution.reviewer_notes or "").strip()
+    msg = f"Human review {action} by {current_user.username}"
+    if notes:
+        msg += f" — {notes[:500]}"
 
     db.add(AuditLog(
-        level="INFO",
+        level=audit_level,
         source="admin_dashboard",
-        message=f"Human review resolved: {resolution.action} by {current_user.username}",
+        message=msg,
         entity_id=item.id,
         entity_type="ai_request",
         user_id=current_user.username,
     ))
     db.commit()
-    return {"status": "resolved", "action": resolution.action}
+    return {
+        "status": "resolved",
+        "action": action,
+        "item_status": item.status,
+        "human_verified": item.human_verified,
+        "human_override": item.human_override,
+    }
 
 
 # ─── Activity Feed ───────────────────────────────────────────────────────────

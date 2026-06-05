@@ -1,5 +1,12 @@
 <template>
-  <header class="h-12 border-b border-ctrl-border bg-ctrl-surface flex items-center px-6 gap-4 sticky top-0 z-10 flex-shrink-0">
+  <header class="h-12 border-b border-ctrl-border bg-ctrl-surface flex items-center px-4 gap-3 sticky top-0 z-10 flex-shrink-0">
+    <button
+      @click="toggle"
+      :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+      class="w-8 h-8 flex items-center justify-center rounded text-ctrl-muted hover:text-ctrl-text hover:bg-ctrl-panel active:scale-[0.95] transition-all"
+    >
+      <component :is="collapsed ? PanelLeftOpen : PanelLeftClose" class="w-4 h-4" />
+    </button>
     <div class="flex-1 min-w-0">
       <span class="font-display font-semibold text-xs uppercase tracking-label text-ctrl-text">{{ title }}</span>
     </div>
@@ -19,8 +26,10 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { RefreshCw } from 'lucide-vue-next'
+import { PanelLeftClose, PanelLeftOpen, RefreshCw } from 'lucide-vue-next'
+import { useSidebarState } from '../composables/useSidebarState.js'
 
+const { collapsed, toggle } = useSidebarState()
 const route      = useRoute()
 const lastSyncAt = ref(new Date())
 const spinning   = ref(false)
@@ -47,9 +56,12 @@ const titles = {
   '/emails':        'Email Analytics',
   '/opportunities': 'Opportunities & Deals',
   '/bookings':      'Bookings',
+  '/calendar':      'Meeting Calendar',
+  '/meets':         'Meeting Prep',
   '/tickets':       'Tickets',
   '/gtm':           'GTM Strategy',
   '/report':        'Operations Report',
+  '/users':         'User Management',
 }
 
 const title = computed(() => {

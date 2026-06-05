@@ -14,8 +14,13 @@ api.interceptors.response.use(
   (r) => r,
   (err) => {
     if (err.response?.status === 401) {
+      // Clear creds, then redirect — but only once, and never when already on /login,
+      // otherwise we get an infinite reload loop from background pollers (AlertBanner etc.).
       localStorage.removeItem('token')
-      window.location.href = '/login'
+      localStorage.removeItem('role')
+      if (window.location.pathname !== '/login') {
+        window.location.replace('/login')
+      }
     }
     return Promise.reject(err)
   }
@@ -98,9 +103,47 @@ export const ticketsAPI = {
   updateStatus: (id, data) => api.patch(`/admin/tickets/${id}/status`, data),
 }
 
+export const calendarAPI = {
+  meetings: (from, to) => api.get('/admin/bookings/calendar', { params: { from, to } }),
+}
+
+export const usersAPI = {
+  list:   () => api.get('/admin/users'),
+  me:     () => api.get('/admin/users/me'),
+  create: (payload) => api.post('/admin/users', payload),
+  update: (id, payload) => api.patch(`/admin/users/${id}`, payload),
+  remove: (id) => api.delete(`/admin/users/${id}`),
+}
+
+function assetExplorerAPI(base) {
+  return {
+    getTree: () => api.get(`${base}/tree`),
+    getStrategy: (path) => api.get(`${base}/strategy/${encodeURI(path)}`),
+    downloadUrl: (path) => `${api.defaults.baseURL}${base}/download/${encodeURI(path)}`,
+    // Fetch the file with the auth header so we can render it inline via blob URL.
+    fetchBlob: (path, mime = 'application/octet-stream') =>
+      api.get(`${base}/download/${encodeURI(path)}`, { responseType: 'blob' })
+        .then(res => new Blob([res.data], { type: mime })),
+    upload: (formData, onProgress) => api.post(`${base}/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: onProgress,
+    }),
+    createFolder: (path) => {
+      const fd = new FormData()
+      fd.append('path', path)
+      return api.post(`${base}/folder`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    },
+    remove: (path) => api.delete(`${base}/${encodeURI(path)}`),
+  }
+}
+
 export const gtmAPI = {
   listStrategies: () => api.get('/admin/gtm/strategies'),
-  getStrategy: (path) => api.get(`/admin/gtm/strategy/${encodeURIComponent(path)}`),
+  ...assetExplorerAPI('/admin/gtm'),
+}
+
+export const meetsAPI = {
+  ...assetExplorerAPI('/admin/meets'),
 }
 
 export default api

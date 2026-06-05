@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-8 max-w-screen-xl">
+  <div class="space-y-8 max-w-none">
 
     <div v-if="error" class="flex items-center gap-3 bg-status-err-bg border border-status-err rounded px-4 py-3 text-status-err text-xs">
       <AlertCircle class="w-4 h-4 flex-shrink-0" />

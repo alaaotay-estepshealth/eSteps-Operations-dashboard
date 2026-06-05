@@ -23,3 +23,7 @@ References/
 # ─── Misc ──────────────────────────────────────────────────────────────────────
 *.log
 .DS_Store
+
+# ─── Meeting PDFs / reference material in root ──────────────────────────────
+*.pdf
+meet - *.pdf

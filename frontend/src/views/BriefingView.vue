@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-8 max-w-screen-xl">
+  <div class="space-y-8 max-w-none">
 
     <div v-if="error" class="flex items-center gap-3 bg-status-err-bg border border-status-err rounded px-4 py-3 text-status-err text-xs">
       <AlertCircle class="w-4 h-4 flex-shrink-0" />
@@ -60,14 +60,19 @@
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
       <SectionContainer title="AI Strategy Memo" subtitle="This week's read on the pipeline">
         <template #action>
-          <button @click="genMemo" :disabled="memoLoading"
-            class="flex items-center gap-2 text-xs border border-status-info text-status-info rounded px-3 py-1.5 hover:bg-status-info-bg disabled:opacity-40 transition-all">
-            <Sparkles class="w-3.5 h-3.5" :class="{ 'animate-pulse': memoLoading }" />
-            {{ memoLoading ? 'Generating…' : 'Generate' }}
-          </button>
+          <div class="flex items-center gap-3">
+            <span v-if="memo && generatedAt" class="text-2xs text-ctrl-dim tabnum hidden sm:inline">
+              Generated {{ memoTimeLabel }}
+            </span>
+            <button @click="genMemo" :disabled="memoLoading"
+              class="flex items-center gap-2 text-xs border border-status-info text-status-info rounded px-3 py-1.5 hover:bg-status-info-bg disabled:opacity-40 transition-all">
+              <Sparkles class="w-3.5 h-3.5" :class="{ 'animate-pulse': memoLoading }" />
+              {{ memoLoading ? 'Generating…' : memo ? 'Regenerate' : 'Generate' }}
+            </button>
+          </div>
         </template>
         <div v-if="memoError" class="text-xs text-status-warn">{{ memoError }}</div>
-        <pre v-else-if="memo" class="text-xs text-ctrl-text whitespace-pre-wrap font-sans leading-relaxed">{{ memo }}</pre>
+        <Markdown v-else-if="memo" :source="memo" />
         <EmptyState v-else :icon="Sparkles" message="Generate a memo for today's strategy read" />
       </SectionContainer>
 
@@ -101,6 +106,8 @@ import SectionContainer from '../components/ui/SectionContainer.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import StatRow from '../components/ui/StatRow.vue'
 import Table from '../components/ui/Table.vue'
+import Markdown from '../components/ui/Markdown.vue'
+import { useDailyMemo } from '../composables/useDailyMemo.js'
 
 const router      = useRouter()
 const auth        = useAuthStore()
@@ -132,15 +139,21 @@ async function bump(row) {
     await load()
   } catch { error.value = 'Action failed.' } finally { actingId.value = null }
 }
-const memo        = ref('')
-const memoError   = ref('')
-const memoLoading = ref(false)
+const { memo, memoError, memoLoading, generatedAt, genMemo } = useDailyMemo()
 
 const greeting = computed(() => {
   const h = new Date().getHours()
   return h < 12 ? 'Good morning.' : h < 18 ? 'Good afternoon.' : 'Good evening.'
 })
 const today = computed(() => new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }))
+const memoTimeLabel = computed(() => {
+  if (!generatedAt.value) return ''
+  const d = new Date(generatedAt.value)
+  if (Number.isNaN(d.getTime())) return ''
+  const sameDay = d.toDateString() === new Date().toDateString()
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return sameDay ? `at ${time}` : d.toLocaleDateString()
+})
 
 const overnightStats = computed(() => {
   const o = b.value.overnight ?? {}
@@ -167,18 +180,6 @@ function timeAgo(iso) {
   if (m < 60) return `${Math.floor(m)}m`
   if (m < 1440) return `${Math.floor(m / 60)}h`
   return `${Math.floor(m / 1440)}d`
-}
-
-async function genMemo() {
-  memoLoading.value = true; memo.value = ''; memoError.value = ''
-  try {
-    const { data } = await adminAPI.generateMemo()
-    memo.value = data.memo
-  } catch (e) {
-    memoError.value = e.response?.data?.detail || 'Could not generate memo.'
-  } finally {
-    memoLoading.value = false
-  }
 }
 
 async function load() {

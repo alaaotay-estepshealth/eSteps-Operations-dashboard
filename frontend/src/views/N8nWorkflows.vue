@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-8 max-w-screen-xl">
+  <div class="space-y-8 max-w-none">
 
     <div v-if="error" class="flex items-center gap-3 bg-status-err-bg border border-status-err rounded px-4 py-3 text-status-err text-xs">
       <AlertCircle class="w-4 h-4 flex-shrink-0" />
@@ -115,8 +115,16 @@ async function load() {
     const { data } = await n8nAPI.listWorkflows()
     const raw = Array.isArray(data) ? data : (data?.data ?? [])
     workflows.value = raw.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
-  } catch {
-    error.value = 'Failed to load n8n workflows. Verify N8N_API_KEY is configured.'
+  } catch (err) {
+    // Surface the backend detail so a timeout doesn't masquerade as a missing API key.
+    const detail = err?.response?.data?.detail
+    if (typeof detail === 'string') {
+      error.value = `Failed to load n8n workflows — ${detail}`
+    } else if (err?.response?.status === 401 || err?.response?.status === 403) {
+      error.value = 'Failed to load n8n workflows — auth rejected. Verify N8N_API_KEY in backend/.env.'
+    } else {
+      error.value = `Failed to load n8n workflows (status ${err?.response?.status ?? 'n/a'}). Check N8N_BASE_URL and that the n8n host is reachable.`
+    }
   } finally {
     loading.value = false
   }

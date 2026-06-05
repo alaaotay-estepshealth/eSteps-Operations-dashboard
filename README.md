@@ -126,6 +126,7 @@ These are the remaining actions to fully complete every phase. None block the da
 
 ### ⏳ Pending — code (ready to build)
 
+- **Meeting notes & checklist (per upcoming meeting)** — design approved 2026-06-05. Materialize the `bookings` table; add `meeting_notes` (markdown prep + recap) and `meeting_tasks` (checklist with due dates) tables; Gemini auto-draft on first open; overdue checklist items bubble into `/followups` and the Briefing badge; deep-linkable `/meeting/:id` plus a drawer launched from Followups rows. Spec: [docs/superpowers/specs/2026-06-05-meeting-notes-and-tickets-design.md](docs/superpowers/specs/2026-06-05-meeting-notes-and-tickets-design.md). LOE ~26 h.
 - **Router tests** — harness is now safe; the newer routers (emails / bookings / opportunities / tickets / gtm / systems / n8n_proxy / webhooks / insights / followups / contacts / lead_actions) still need tests. Requires `TEST_DATABASE_URL` (throwaway Postgres) to run — never the prod Supabase URL.
 - **Reply-from-dash** — Human Review approve → send the drafted reply via n8n (needs an n8n send-webhook URL).
 
@@ -372,7 +373,11 @@ python -m app.seed                              # seeds 5 systems + demo data
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 # Frontend
-cd frontend && npm install && npm run dev      # → http://localhost:5173
+cd frontend 
+
+npm install 
+
+npm run dev      # → http://localhost:5173
 ```
 
 ### Local Docker (dev only)

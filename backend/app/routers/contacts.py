@@ -108,12 +108,30 @@ def get_contact(
     db: Session = Depends(get_leads_db),
     _: User = Depends(get_current_user),
 ):
+    # `to_jsonb(leads.*) ->> 'col'` returns NULL when the column is absent — keeps the
+    # query schema-tolerant against the upstream Supabase leads DB.
     row = db.execute(text(
         "SELECT id, lead_id, CONCAT(first_name, ' ', last_name) AS name, email, institution, "
         "department, position, research_interest, research_area, lead_score, esteps_relevance_score, "
         "stage, campaign_stage, campaign_tag, ab_variant, touch_number, last_contacted, next_send_date, "
         "linkedin_url, h_index, publication_count, meeting_scheduled_for, meeting_booked_at, notes, "
-        "email1_sent_at, email2_sent_at, email3_sent_at, email4_sent_at, email5_sent_at "
+        "email1_sent_at, email2_sent_at, email3_sent_at, email4_sent_at, email5_sent_at, "
+        "COALESCE("
+        "  to_jsonb(leads.*) ->> 'phone',"
+        "  to_jsonb(leads.*) ->> 'phone_number',"
+        "  to_jsonb(leads.*) ->> 'mobile',"
+        "  to_jsonb(leads.*) ->> 'mobile_phone',"
+        "  to_jsonb(leads.*) ->> 'contact_phone'"
+        ") AS phone, "
+        "COALESCE("
+        "  to_jsonb(leads.*) ->> 'twitter_url',"
+        "  to_jsonb(leads.*) ->> 'twitter'"
+        ") AS twitter_url, "
+        "COALESCE("
+        "  to_jsonb(leads.*) ->> 'website',"
+        "  to_jsonb(leads.*) ->> 'personal_url',"
+        "  to_jsonb(leads.*) ->> 'profile_url'"
+        ") AS website "
         "FROM leads WHERE lead_id = :lid"
     ), {"lid": lead_id}).mappings().first()
     if not row:

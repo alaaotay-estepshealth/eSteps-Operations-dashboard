@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-8 max-w-screen-xl">
+  <div class="space-y-8 max-w-none">
 
     <div v-if="error" class="flex items-center gap-3 bg-status-err-bg border border-status-err rounded px-4 py-3 text-status-err text-xs">
       <AlertCircle class="w-4 h-4 flex-shrink-0" />
@@ -44,7 +44,7 @@
           </div>
         </template>
         <template #cell-actions="{ row }">
-          <div v-if="isAdmin" class="space-y-1.5">
+          <div v-if="canReview" class="space-y-1.5">
             <div class="flex items-center gap-1.5">
               <button
                 @click="resolve(row.id, 'approve')"
@@ -77,7 +77,7 @@
               <button @click="cancelResolve()" class="px-2 py-1 text-2xs text-ctrl-dim hover:text-ctrl-muted">✕</button>
             </div>
           </div>
-          <span v-else class="text-2xs text-ctrl-dim">admin only</span>
+          <span v-else class="text-2xs text-ctrl-dim">operator+ only</span>
         </template>
       </Table>
     </SectionContainer>
@@ -96,8 +96,8 @@ import SectionContainer from '../components/ui/SectionContainer.vue'
 import StatRow from '../components/ui/StatRow.vue'
 import Table from '../components/ui/Table.vue'
 
-const auth     = useAuthStore()
-const isAdmin  = computed(() => auth.role === 'admin')
+const auth      = useAuthStore()
+const canReview = computed(() => auth.isOperator)
 const queue    = ref([])
 const loading  = ref(false)
 const error    = ref('')

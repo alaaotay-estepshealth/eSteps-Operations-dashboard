@@ -1,6 +1,8 @@
-from typing import Optional
+from datetime import date, datetime, timedelta
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -10,6 +12,19 @@ from app.models.user import User
 from app.schemas.responses import BookingRow, BookingStats, PaginatedBookings
 
 router = APIRouter(prefix="/admin/bookings", tags=["bookings"])
+
+
+class CalendarMeeting(BaseModel):
+    lead_id: Optional[str] = None
+    lead_name: Optional[str] = None
+    institution: Optional[str] = None
+    when: datetime
+    source: str
+    status: str
+
+
+# NOTE: the endpoint returns a plain dict so the JSON key can stay `from`
+# (Python's reserved word makes a model field tricky).
 
 
 @router.get("/stats", response_model=BookingStats)
@@ -129,3 +144,51 @@ def list_bookings(
         for r in rows
     ]
     return PaginatedBookings(total=total, offset=offset, limit=limit, bookings=bookings)
+
+
+@router.get("/calendar")
+def calendar_meetings(
+    from_: Optional[date] = Query(None, alias="from"),
+    to: Optional[date] = Query(None),
+    db: Session = Depends(get_leads_db),
+    _: User = Depends(get_current_user),
+):
+    """All scheduled meetings in a date window — feeds the calendar view."""
+    today = date.today()
+    start = from_ or (today.replace(day=1))
+    # End of next month if no `to` was given.
+    if to is None:
+        next_month_first = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+        end = (next_month_first.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+    else:
+        end = to
+    if end < start:
+        raise HTTPException(status_code=400, detail="`to` must be >= `from`")
+
+    rows = db.execute(text(
+        """
+        SELECT lead_id,
+               CONCAT(first_name, ' ', last_name) AS lead_name,
+               institution,
+               meeting_scheduled_for AS when_,
+               CASE WHEN meeting_scheduled_for <= now() THEN 'past' ELSE 'upcoming' END AS status
+        FROM leads
+        WHERE meeting_scheduled_for IS NOT NULL
+          AND meeting_scheduled_for >= :start
+          AND meeting_scheduled_for <  :end_excl
+        ORDER BY meeting_scheduled_for ASC
+        """
+    ), {"start": start, "end_excl": end + timedelta(days=1)}).mappings().all()
+
+    meetings = [
+        CalendarMeeting(
+            lead_id=r["lead_id"],
+            lead_name=r["lead_name"],
+            institution=r["institution"],
+            when=r["when_"],
+            source="lead",
+            status=r["status"],
+        )
+        for r in rows
+    ]
+    return {"from": start.isoformat(), "to": end.isoformat(), "meetings": [m.model_dump(mode="json") for m in meetings]}
