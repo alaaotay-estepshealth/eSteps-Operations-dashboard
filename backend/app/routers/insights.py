@@ -1,16 +1,15 @@
 from datetime import datetime, timedelta
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_admin
-from app.config import settings
 from app.database import get_db, get_leads_db
 from app.models.user import User
 from app.models.workflow_execution import WorkflowExecution
+from app.services.gemini import call_gemini
 
 router = APIRouter(prefix="/admin/insights", tags=["insights"])
 
@@ -263,91 +262,15 @@ def generate_memo(
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
 ):
-    if not settings.gemini_api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="GEMINI_API_KEY not configured — add it to backend/.env to enable AI strategy memos.",
-        )
-
     facts = get_insights(days=7, leads_db=leads_db, db=db, _=user)
     prompt = _build_prompt(facts)
 
     try:
-        resp = httpx.post(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-            params={"key": settings.gemini_api_key},
-            json={"contents": [{"parts": [{"text": prompt}]}]},
-            timeout=30.0,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        memo = data["candidates"][0]["content"]["parts"][0]["text"]
-    except httpx.HTTPStatusError as e:
-        # Surface Gemini's actual error so the dashboard can show actionable copy
-        # (invalid key, quota exceeded, model not available, etc.)
-        upstream = ""
-        try:
-            err_json = e.response.json()
-            upstream = err_json.get("error", {}).get("message", "")[:200]
-        except Exception:
-            upstream = (e.response.text or "")[:200]
-        hint = ""
-        if e.response.status_code in (401, 403):
-            hint = " — check GEMINI_API_KEY is valid"
-        elif e.response.status_code == 404:
-            hint = " — model 'gemini-2.5-flash' not available on this key; try gemini-1.5-flash"
-        elif e.response.status_code == 429:
-            hint = " — quota exceeded; wait or upgrade plan"
-        raise HTTPException(
-            status_code=502,
-            detail=f"Gemini upstream returned {e.response.status_code}{hint}. {upstream}".strip(),
-        )
-    except (KeyError, IndexError):
-        raise HTTPException(status_code=502, detail="Unexpected response shape from Gemini")
-    except Exception:
-        raise HTTPException(status_code=503, detail="AI service unavailable")
-
-    return {"memo": memo, "generated_at": datetime.utcnow().isoformat()}
-
-
-def _call_gemini(prompt: str) -> str:
-    if not settings.gemini_api_key:
-        raise HTTPException(status_code=503, detail="GEMINI_API_KEY not configured — add it to backend/.env.")
-    try:
-        resp = httpx.post(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-            params={"key": settings.gemini_api_key},
-            json={"contents": [{"parts": [{"text": prompt}]}]},
-            timeout=30.0,
-        )
-        resp.raise_for_status()
-        return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except httpx.HTTPStatusError as e:
-        # Surface Gemini's actual error so the dashboard can show actionable copy
-        # (invalid key, quota exceeded, model not available, etc.)
-        upstream = ""
-        try:
-            err_json = e.response.json()
-            upstream = err_json.get("error", {}).get("message", "")[:200]
-        except Exception:
-            upstream = (e.response.text or "")[:200]
-        hint = ""
-        if e.response.status_code in (401, 403):
-            hint = " — check GEMINI_API_KEY is valid"
-        elif e.response.status_code == 404:
-            hint = " — model 'gemini-2.5-flash' not available on this key; try gemini-1.5-flash"
-        elif e.response.status_code == 429:
-            hint = " — quota exceeded; wait or upgrade plan"
-        raise HTTPException(
-            status_code=502,
-            detail=f"Gemini upstream returned {e.response.status_code}{hint}. {upstream}".strip(),
-        )
-    except (KeyError, IndexError):
-        raise HTTPException(status_code=502, detail="Unexpected response shape from Gemini")
+        memo = call_gemini(prompt)
     except HTTPException:
         raise
-    except Exception:
-        raise HTTPException(status_code=503, detail="AI service unavailable")
+
+    return {"memo": memo, "generated_at": datetime.utcnow().isoformat()}
 
 
 def _facts_context(facts: dict) -> str:
@@ -389,7 +312,7 @@ def assistant(
         f"DATA:\n{_facts_context(facts)}\n"
         f"QUESTION: {q}"
     )
-    return {"answer": _call_gemini(prompt), "generated_at": datetime.utcnow().isoformat()}
+    return {"answer": call_gemini(prompt), "generated_at": datetime.utcnow().isoformat()}
 
 
 @router.get("/heatmap")
