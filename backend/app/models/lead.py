@@ -39,6 +39,7 @@ class Lead(Base):
     # Engagement
     reply_received = Column(Boolean, default=False)
     meeting_booked_at = Column(DateTime(timezone=True), nullable=True)
+    meeting_scheduled_for = Column(DateTime(timezone=True), nullable=True)
 
     # Processing metrics (ES-OPS-09)
     processed_at = Column(DateTime(timezone=True), nullable=True)
