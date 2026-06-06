@@ -302,3 +302,41 @@ def test_ticket_suggestion_history_returns_all_statuses(client, db, admin_token)
     assert body["total"] == 2
     statuses = {s["status"] for s in body["suggestions"]}
     assert statuses == {"pending", "superseded"}
+
+
+def test_ticket_list_includes_latest_pending_suggestion(client, db, admin_token):
+    tid = _seed_ticket(db)
+    sid = _seed_pending_suggestion(db, tid)
+
+    res = client.get(
+        "/admin/tickets",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert res.status_code == 200
+    row = next(
+        (t for t in res.json()["tickets"] if t["id"] == str(tid)), None
+    )
+    assert row is not None
+    assert row["suggestion"] is not None
+    assert row["suggestion"]["id"] == str(sid)
+    assert row["suggestion"]["status"] == "pending"
+
+
+def test_ticket_list_excludes_superseded(client, db, admin_token):
+    tid = _seed_ticket(db)
+    sid = _seed_pending_suggestion(db, tid)
+    db.execute(
+        text("UPDATE ai_suggestions SET status='superseded' WHERE id=:id"),
+        {"id": str(sid)},
+    )
+    db.commit()
+
+    res = client.get(
+        "/admin/tickets",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    row = next(
+        (t for t in res.json()["tickets"] if t["id"] == str(tid)), None
+    )
+    assert row is not None
+    assert row["suggestion"] is None

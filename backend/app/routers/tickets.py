@@ -85,37 +85,99 @@ def list_tickets(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
-):
-    query = db.query(Ticket)
-
+) -> PaginatedTickets:
+    filters = []
+    params: dict = {"limit": limit, "offset": offset}
     if status:
-        query = query.filter(Ticket.status == status)
+        filters.append("t.status = :status")
+        params["status"] = status
     if ai_category:
-        query = query.filter(Ticket.ai_category == ai_category)
+        filters.append("t.ai_category = :ai_category")
+        params["ai_category"] = ai_category
+    where = "WHERE " + " AND ".join(filters) if filters else ""
 
-    total = query.count()
-    rows = query.order_by(Ticket.created_at.desc()).offset(offset).limit(limit).all()
+    total = db.execute(
+        text(f"SELECT count(*) FROM tickets t {where}"), params
+    ).scalar() or 0
 
-    tickets = [
-        TicketRow(
-            id=t.id,
-            created_at=t.created_at,
-            source=t.source,
-            subject=t.subject,
-            body_preview=t.body_preview,
-            ai_category=t.ai_category,
-            ai_priority_score=t.ai_priority_score,
-            ai_confidence=t.ai_confidence,
-            assigned_to=t.assigned_to,
-            status=t.status,
-            resolved_at=t.resolved_at,
-            response_time_min=t.response_time_min,
-            human_verified=t.human_verified,
+    rows = db.execute(
+        text(
+            "SELECT t.id, t.source, t.subject, t.body_preview, t.ai_category, "
+            "t.ai_priority_score, t.ai_confidence, t.assigned_to, t.status, "
+            "t.human_verified, t.created_at, t.resolved_at, "
+            "t.response_time_min, "
+            "s.id AS s_id, s.entity_type AS s_entity_type, "
+            "s.entity_id AS s_entity_id, s.payload AS s_payload, "
+            "s.applied_payload AS s_applied_payload, s.model AS s_model, "
+            "s.confidence AS s_confidence, s.status AS s_status, "
+            "s.rationale AS s_rationale, s.applied_at AS s_applied_at, "
+            "s.applied_by AS s_applied_by, s.rejected_at AS s_rejected_at, "
+            "s.rejected_by AS s_rejected_by, "
+            "s.rejection_reason AS s_rejection_reason, "
+            "s.ai_request_id AS s_ai_request_id, "
+            "s.created_at AS s_created_at, s.updated_at AS s_updated_at "
+            "FROM tickets t "
+            "LEFT JOIN LATERAL ("
+            "  SELECT * FROM ai_suggestions "
+            "  WHERE entity_type='ticket' AND entity_id = t.id "
+            "    AND status != 'superseded' "
+            "  ORDER BY created_at DESC LIMIT 1"
+            ") s ON true "
+            f"{where} "
+            "ORDER BY t.created_at DESC "
+            "LIMIT :limit OFFSET :offset"
+        ),
+        params,
+    ).mappings().all()
+
+    tickets_out: list[TicketRow] = []
+    for r in rows:
+        suggestion = None
+        if r["s_id"] is not None:
+            suggestion = SuggestionDetail(
+                id=r["s_id"],
+                entity_type=r["s_entity_type"],
+                entity_id=r["s_entity_id"],
+                payload=r["s_payload"] or {},
+                applied_payload=r["s_applied_payload"],
+                model=r["s_model"],
+                confidence=r["s_confidence"],
+                status=r["s_status"],
+                rationale=r["s_rationale"],
+                applied_at=r["s_applied_at"],
+                applied_by=r["s_applied_by"],
+                rejected_at=r["s_rejected_at"],
+                rejected_by=r["s_rejected_by"],
+                rejection_reason=r["s_rejection_reason"],
+                ai_request_id=r["s_ai_request_id"],
+                created_at=r["s_created_at"],
+                updated_at=r["s_updated_at"],
+            )
+        tickets_out.append(
+            TicketRow(
+                id=r["id"],
+                created_at=r["created_at"],
+                source=r["source"],
+                subject=r["subject"],
+                body_preview=r["body_preview"],
+                ai_category=r["ai_category"],
+                ai_priority_score=r["ai_priority_score"],
+                ai_confidence=r["ai_confidence"],
+                assigned_to=r["assigned_to"],
+                status=r["status"],
+                resolved_at=r["resolved_at"],
+                response_time_min=r["response_time_min"],
+                human_verified=r["human_verified"],
+                suggestion=suggestion,
+            )
         )
-        for t in rows
-    ]
 
-    return PaginatedTickets(total=total, offset=offset, limit=limit, tickets=tickets)
+    return PaginatedTickets(
+        total=total,
+        limit=limit,
+        offset=offset,
+        tickets=tickets_out,
+    )
 
 
 @router.patch("/{ticket_id}/status")
