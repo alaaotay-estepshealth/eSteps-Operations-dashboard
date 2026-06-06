@@ -104,3 +104,51 @@ def apply_suggestion(
     )
 
     return SuggestionDetail.model_validate(dict(row))
+
+
+@router.post("/{suggestion_id}/reject", response_model=SuggestionDetail)
+def reject_suggestion(
+    suggestion_id: UUID,
+    body: SuggestionRejectBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_operator),
+) -> SuggestionDetail:
+    row = db.execute(
+        text(
+            "UPDATE ai_suggestions SET status='rejected', rejected_at=now(), "
+            "rejected_by=:user, rejection_reason=:reason, updated_at=now() "
+            "WHERE id=:id AND status='pending' "
+            "RETURNING id, entity_type, entity_id, payload, applied_payload, "
+            "model, confidence, status, rationale, applied_at, applied_by, "
+            "rejected_at, rejected_by, rejection_reason, ai_request_id, "
+            "created_at, updated_at"
+        ),
+        {
+            "id": str(suggestion_id),
+            "user": user.username,
+            "reason": body.reason,
+        },
+    ).mappings().first()
+
+    if not row:
+        existing = db.query(AISuggestion).filter(
+            AISuggestion.id == suggestion_id
+        ).first()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Suggestion not found")
+        raise HTTPException(
+            status_code=409, detail=f"Suggestion is already {existing.status}"
+        )
+
+    db.commit()
+
+    write_audit(
+        db,
+        user,
+        action="ai.suggestion.reject",
+        resource_type=row["entity_type"],
+        resource_id=str(row["entity_id"]),
+        payload={"suggestion_id": str(suggestion_id), "reason": body.reason},
+    )
+
+    return SuggestionDetail.model_validate(dict(row))

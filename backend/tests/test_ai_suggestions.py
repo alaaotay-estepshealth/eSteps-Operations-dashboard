@@ -243,3 +243,19 @@ def test_apply_race_returns_409(client, db, admin_token):
     )
     assert res.status_code == 409
     assert "already" in res.text.lower()
+
+
+def test_reject_marks_rejected_with_reason(client, db, admin_token):
+    tid = _seed_ticket(db)
+    sid = _seed_pending_suggestion(db, tid)
+
+    res = client.post(
+        f"/admin/suggestions/{sid}/reject",
+        json={"reason": "low confidence and stale ticket"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "rejected"
+    assert body["rejection_reason"] == "low confidence and stale ticket"
+    assert body["rejected_at"] is not None
