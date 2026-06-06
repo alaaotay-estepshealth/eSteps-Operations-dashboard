@@ -60,8 +60,8 @@
         <template #cell-created_at="{ value }">
           <span class="tabnum text-ctrl-muted text-xs">{{ formatDate(value) }}</span>
         </template>
-        <template #cell-subject="{ value }">
-          <span class="font-medium text-ctrl-text">{{ value ?? '—' }}</span>
+        <template #cell-subject="{ row, value }">
+          <button @click="openDrawer(row)" class="font-medium text-ctrl-text hover:text-status-info transition-colors text-left">{{ value ?? '—' }}</button>
         </template>
         <template #cell-category="{ value }">
           <span class="text-ctrl-muted text-xs">{{ value ?? '—' }}</span>
@@ -136,6 +136,66 @@
       </div>
     </SectionContainer>
 
+    <!-- Ticket detail drawer -->
+    <div v-if="drawer" class="fixed inset-0 z-30" @keydown.esc="closeDrawer" tabindex="-1">
+      <div class="absolute inset-0 bg-black/50" @click="closeDrawer" />
+      <aside
+        @click.stop
+        class="absolute inset-y-0 right-0 w-full max-w-lg bg-ctrl-surface border-l border-ctrl-border overflow-y-auto p-6 space-y-5"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="font-display font-semibold text-lg text-ctrl-text break-words">{{ drawer.subject || '(no subject)' }}</div>
+            <div class="text-2xs text-ctrl-muted mt-1 tabnum">{{ formatDate(drawer.created_at) }} · source: {{ drawer.source ?? '—' }}</div>
+          </div>
+          <button @click="closeDrawer" class="text-ctrl-dim hover:text-ctrl-text text-lg leading-none">✕</button>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <Badge :variant="ticketVariant(drawer.status)">{{ drawer.status }}</Badge>
+          <Badge v-if="drawer.ai_category" variant="info">{{ drawer.ai_category }}</Badge>
+          <Badge v-if="drawer.ai_priority_score" :variant="drawer.ai_priority_score >= 4 ? 'error' : drawer.ai_priority_score >= 3 ? 'warning' : 'default'">priority {{ drawer.ai_priority_score }}/5</Badge>
+          <Badge v-if="drawer.assigned_to" variant="default">→ {{ drawer.assigned_to }}</Badge>
+          <Badge v-if="drawer.human_verified" variant="success">human verified</Badge>
+          <Badge v-if="drawer.human_override" variant="warning">overridden</Badge>
+        </div>
+
+        <div>
+          <div class="font-display text-2xs uppercase tracking-label text-ctrl-muted mb-2">Body</div>
+          <div class="bg-ctrl-panel border border-ctrl-border rounded p-3 text-xs text-ctrl-text whitespace-pre-wrap break-words">{{ drawer.body_preview || '—' }}</div>
+        </div>
+
+        <div v-if="drawer.suggestion">
+          <div class="font-display text-2xs uppercase tracking-label text-ctrl-muted mb-2">AI suggestion</div>
+          <div class="bg-ctrl-panel border border-ctrl-border rounded p-3 text-xs space-y-2">
+            <div class="flex flex-wrap gap-2">
+              <Badge variant="info">status: {{ drawer.suggestion.status }}</Badge>
+              <Badge v-if="drawer.suggestion.confidence != null">confidence {{ Math.round(drawer.suggestion.confidence * 100) }}%</Badge>
+              <span class="text-2xs text-ctrl-dim">{{ drawer.suggestion.model }}</span>
+            </div>
+            <div v-if="drawer.suggestion.rationale" class="text-ctrl-text">{{ drawer.suggestion.rationale }}</div>
+            <pre class="text-2xs text-ctrl-muted whitespace-pre-wrap">{{ JSON.stringify(drawer.suggestion.payload, null, 2) }}</pre>
+          </div>
+        </div>
+
+        <div v-if="isAdmin">
+          <div class="font-display text-2xs uppercase tracking-label text-ctrl-muted mb-2">Status</div>
+          <select
+            :value="drawer.status"
+            @change="updateStatusFromDrawer($event.target.value)"
+            class="bg-ctrl-panel border border-ctrl-border rounded text-xs text-ctrl-text px-2 py-1.5 w-full focus:outline-none"
+            :disabled="updating === drawer.id"
+          >
+            <option value="open">Open</option>
+            <option value="in_progress">In Progress</option>
+            <option value="resolved">Resolved</option>
+          </select>
+        </div>
+
+        <div class="text-2xs text-ctrl-dim tabnum">id: {{ drawer.id }}</div>
+      </aside>
+    </div>
+
   </div>
 </template>
 
@@ -167,6 +227,15 @@ const ticketFilters = ref({ status: '', category: '' })
 const operators    = ref([])
 const suggestingId = ref(null)   // ticket id currently awaiting Gemini
 const applyingId   = ref(null)   // suggestion id currently being applied/rejected
+const drawer       = ref(null)   // open ticket row, reactive — mutations flow back to table
+
+function openDrawer(row) { drawer.value = row }
+function closeDrawer() { drawer.value = null }
+async function updateStatusFromDrawer(newStatus) {
+  if (!drawer.value) return
+  await updateStatus(drawer.value.id, newStatus)
+  drawer.value.status = newStatus
+}
 
 const ticketColumns = [
   { key: 'created_at',    label: 'Created' },
