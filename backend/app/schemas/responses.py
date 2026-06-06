@@ -663,8 +663,8 @@ class SuggestionDetail(BaseModel):
     id: UUID
     entity_type: str
     entity_id: UUID
-    payload: dict
-    applied_payload: Optional[dict] = None
+    payload: Dict[str, Any]
+    applied_payload: Optional[Dict[str, Any]] = None
     model: str
     confidence: Optional[float] = None
     status: Literal["pending", "applied", "rejected", "superseded"]
@@ -678,9 +678,12 @@ class SuggestionDetail(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    class Config:
+        from_attributes = True
+
 
 class SuggestionApplyBody(BaseModel):
-    override_payload: Optional[dict] = None
+    override_payload: Optional[Dict[str, Any]] = None
 
 
 class SuggestionRejectBody(BaseModel):
