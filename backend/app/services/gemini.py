@@ -4,6 +4,7 @@ Two callers today: routers/insights.py (memo + assistant) and
 routers/meetings.py (prep auto-draft). Centralizing keeps the upstream
 error handling identical and lets us share the daily-spend cache.
 """
+
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -67,7 +68,9 @@ def call_gemini(prompt: str, timeout: float = 30.0) -> str:
             detail=f"Gemini upstream returned {e.response.status_code}{hint}. {upstream}".strip(),
         )
     except (KeyError, IndexError):
-        raise HTTPException(status_code=502, detail="Unexpected response shape from Gemini")
+        raise HTTPException(
+            status_code=502, detail="Unexpected response shape from Gemini"
+        )
     except HTTPException:
         raise
     except Exception:
@@ -85,12 +88,15 @@ def gemini_today_spend_usd(db: Session) -> float:
     if now < _spend_cache["expires_at"]:
         return _spend_cache["value"]
     try:
-        spent = db.execute(
-            text(
-                "SELECT COALESCE(SUM(cost_estimate_usd), 0) FROM ai_decisions "
-                "WHERE created_at::date = CURRENT_DATE"
-            )
-        ).scalar() or 0.0
+        spent = (
+            db.execute(
+                text(
+                    "SELECT COALESCE(SUM(cost_estimate_usd), 0) FROM ai_decisions "
+                    "WHERE created_at::date = CURRENT_DATE"
+                )
+            ).scalar()
+            or 0.0
+        )
         spent = float(spent)
     except Exception:
         spent = 0.0
@@ -138,4 +144,5 @@ def record_decision_row(
 
 def _json(payload: dict) -> str:
     import json
+
     return json.dumps(payload, default=str)

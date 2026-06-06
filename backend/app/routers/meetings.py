@@ -1,4 +1,5 @@
 """Meeting prep + checklist endpoints (ES-OPS-09-MEET-NOTES)."""
+
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import UUID
@@ -46,9 +47,12 @@ class SyncBody(BaseModel):
     dry_run: bool = False
 
 
-def _audit(db: Session, user: User, action: str, resource_id: str, payload: dict | None = None) -> None:
+def _audit(
+    db: Session, user: User, action: str, resource_id: str, payload: dict | None = None
+) -> None:
     try:
         from app.models.audit_log import AuditLog
+
         row = AuditLog(
             user_id=getattr(user, "id", None),
             action=action,
@@ -76,12 +80,16 @@ def sync_meetings(
     previous time in `rescheduled_from`. Outside the window we insert a new row
     so each distinct meeting gets its own notes.
     """
-    rows = leads_db.execute(
-        text(
-            "SELECT id AS lead_id, meeting_scheduled_for "
-            "FROM leads WHERE meeting_scheduled_for IS NOT NULL"
+    rows = (
+        leads_db.execute(
+            text(
+                "SELECT id AS lead_id, meeting_scheduled_for "
+                "FROM leads WHERE meeting_scheduled_for IS NOT NULL"
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
 
     created = updated = rescheduled = skipped = 0
 
@@ -94,7 +102,9 @@ def sync_meetings(
 
         existing = (
             db.query(Booking)
-            .filter(Booking.lead_id == lid, Booking.status.in_(("scheduled", "rescheduled")))
+            .filter(
+                Booking.lead_id == lid, Booking.status.in_(("scheduled", "rescheduled"))
+            )
             .order_by(Booking.scheduled_for.desc())
             .first()
         )
@@ -144,39 +154,61 @@ def sync_meetings(
 
     if not body.dry_run:
         db.commit()
-    _audit(db, user, "meetings.sync", "n/a", {"source": body.source, "created": created,
-                                              "updated": updated, "rescheduled": rescheduled})
+    _audit(
+        db,
+        user,
+        "meetings.sync",
+        "n/a",
+        {
+            "source": body.source,
+            "created": created,
+            "updated": updated,
+            "rescheduled": rescheduled,
+        },
+    )
     return MeetingSyncResult(
-        created=created, updated=updated, rescheduled=rescheduled,
-        skipped=skipped, dry_run=body.dry_run,
+        created=created,
+        updated=updated,
+        rescheduled=rescheduled,
+        skipped=skipped,
+        dry_run=body.dry_run,
     )
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
+
 def _lead_summary(leads_db: Session, lead_id: UUID) -> MeetingLeadSummary | None:
-    row = leads_db.execute(
-        text(
-            "SELECT id, CONCAT(first_name, ' ', last_name) AS name, institution, "
-            "title, research_area, lead_score, stage, "
-            "LEFT(COALESCE(bio, ''), 400) AS bio_excerpt "
-            "FROM leads WHERE id = :id"
-        ),
-        {"id": str(lead_id)},
-    ).mappings().first()
+    row = (
+        leads_db.execute(
+            text(
+                "SELECT id, CONCAT(first_name, ' ', last_name) AS name, institution, "
+                "title, research_area, lead_score, stage, "
+                "LEFT(COALESCE(bio, ''), 400) AS bio_excerpt "
+                "FROM leads WHERE id = :id"
+            ),
+            {"id": str(lead_id)},
+        )
+        .mappings()
+        .first()
+    )
     if not row:
         return None
 
     inbound = None
     try:
-        inbound = leads_db.execute(
-            text(
-                "SELECT created_at, LEFT(COALESCE(body, ''), 400) AS excerpt "
-                "FROM conversations WHERE lead_id = :id AND direction = 'inbound' "
-                "ORDER BY created_at DESC LIMIT 1"
-            ),
-            {"id": str(lead_id)},
-        ).mappings().first()
+        inbound = (
+            leads_db.execute(
+                text(
+                    "SELECT created_at, LEFT(COALESCE(body, ''), 400) AS excerpt "
+                    "FROM conversations WHERE lead_id = :id AND direction = 'inbound' "
+                    "ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"id": str(lead_id)},
+            )
+            .mappings()
+            .first()
+        )
     except Exception:
         inbound = None
 
@@ -196,11 +228,18 @@ def _lead_summary(leads_db: Session, lead_id: UUID) -> MeetingLeadSummary | None
 
 def _booking_summary(b: Booking) -> MeetingBookingSummary:
     return MeetingBookingSummary(
-        id=b.id, lead_id=b.lead_id, title=b.title, status=b.status,
-        scheduled_for=b.scheduled_for, duration_min=b.duration_min,
-        meeting_url=b.meeting_url, source=b.source,
-        rescheduled_from=b.rescheduled_from, completed_at=b.completed_at,
-        canceled_at=b.canceled_at, no_show_detected=bool(b.no_show_detected),
+        id=b.id,
+        lead_id=b.lead_id,
+        title=b.title,
+        status=b.status,
+        scheduled_for=b.scheduled_for,
+        duration_min=b.duration_min,
+        meeting_url=b.meeting_url,
+        source=b.source,
+        rescheduled_from=b.rescheduled_from,
+        completed_at=b.completed_at,
+        canceled_at=b.canceled_at,
+        no_show_detected=bool(b.no_show_detected),
     )
 
 
@@ -211,10 +250,17 @@ def _task_row(t: MeetingTask) -> MeetingTaskRow:
         if delta > 0:
             overdue = round(delta, 1)
     return MeetingTaskRow(
-        id=t.id, booking_id=t.booking_id, title=t.title, done=t.done,
-        done_at=t.done_at, due_at=t.due_at, assignee=t.assignee,
-        order_index=t.order_index, created_by=t.created_by,
-        created_at=t.created_at, updated_at=t.updated_at,
+        id=t.id,
+        booking_id=t.booking_id,
+        title=t.title,
+        done=t.done,
+        done_at=t.done_at,
+        due_at=t.due_at,
+        assignee=t.assignee,
+        order_index=t.order_index,
+        created_by=t.created_by,
+        created_at=t.created_at,
+        updated_at=t.updated_at,
         overdue_by_hours=overdue,
     )
 
@@ -223,13 +269,17 @@ def _notes_data(n: MeetingNote | None) -> MeetingNoteData:
     if n is None:
         return MeetingNoteData(prep_md="", recap_md="")
     return MeetingNoteData(
-        prep_md=n.prep_md, recap_md=n.recap_md,
-        ai_drafted_at=n.ai_drafted_at, ai_model=n.ai_model,
-        updated_by=n.updated_by, updated_at=n.updated_at,
+        prep_md=n.prep_md,
+        recap_md=n.recap_md,
+        ai_drafted_at=n.ai_drafted_at,
+        ai_model=n.ai_model,
+        updated_by=n.updated_by,
+        updated_at=n.updated_at,
     )
 
 
 # ─── Endpoints ──────────────────────────────────────────────────────────────
+
 
 @router.get("", response_model=List[MeetingListItem])
 def list_meetings(
@@ -250,19 +300,25 @@ def list_meetings(
     lead_ids = {b.lead_id for b in bookings}
     lead_rows: dict = {}
     if lead_ids:
-        for r in leads_db.execute(
-            text(
-                "SELECT id, CONCAT(first_name, ' ', last_name) AS name, institution "
-                "FROM leads WHERE id = ANY(:ids)"
-            ),
-            {"ids": [str(i) for i in lead_ids]},
-        ).mappings().all():
+        for r in (
+            leads_db.execute(
+                text(
+                    "SELECT id, CONCAT(first_name, ' ', last_name) AS name, institution "
+                    "FROM leads WHERE id = ANY(:ids)"
+                ),
+                {"ids": [str(i) for i in lead_ids]},
+            )
+            .mappings()
+            .all()
+        ):
             lead_rows[str(r["id"])] = r
 
     booking_ids = [b.id for b in bookings]
     has_notes = {
         str(n.booking_id)
-        for n in db.query(MeetingNote.booking_id).filter(MeetingNote.booking_id.in_(booking_ids)).all()
+        for n in db.query(MeetingNote.booking_id)
+        .filter(MeetingNote.booking_id.in_(booking_ids))
+        .all()
     }
     open_counts: dict = {}
     for bid, cnt in db.execute(
@@ -281,9 +337,12 @@ def list_meetings(
         lr = lead_rows.get(str(b.lead_id), {})
         out.append(
             MeetingListItem(
-                booking_id=b.id, lead_id=b.lead_id,
-                lead_name=lr.get("name"), institution=lr.get("institution"),
-                scheduled_for=b.scheduled_for, status=b.status,
+                booking_id=b.id,
+                lead_id=b.lead_id,
+                lead_name=lr.get("name"),
+                institution=lr.get("institution"),
+                scheduled_for=b.scheduled_for,
+                status=b.status,
                 open_task_count=open_counts.get(str(b.id), 0),
                 has_notes=str(b.id) in has_notes,
                 duration_min=b.duration_min,
@@ -308,7 +367,10 @@ def get_meeting(
     )
 
     note, skipped = _try_autodraft(
-        db, booking, lead, actor=getattr(user, "username", None) or getattr(user, "email", None)
+        db,
+        booking,
+        lead,
+        actor=getattr(user, "username", None) or getattr(user, "email", None),
     )
 
     tasks = (
@@ -338,13 +400,16 @@ def get_meeting(
         notes=notes_payload,
         tasks=[_task_row(t) for t in tasks],
         previous_meetings=[
-            PreviousMeeting(booking_id=p.id, scheduled_for=p.scheduled_for, status=p.status)
+            PreviousMeeting(
+                booking_id=p.id, scheduled_for=p.scheduled_for, status=p.status
+            )
             for p in prev
         ],
     )
 
 
 # ─── Notes + Tasks CRUD ──────────────────────────────────────────────────────
+
 
 def _get_booking_or_404(db: Session, booking_id: UUID) -> Booking:
     b = db.query(Booking).filter(Booking.id == booking_id).first()
@@ -372,8 +437,16 @@ def patch_notes(
     note.updated_by = getattr(user, "username", None) or getattr(user, "email", None)
     db.commit()
     db.refresh(note)
-    _audit(db, user, "meetings.notes.update", str(booking_id),
-           {"prep_changed": body.prep_md is not None, "recap_changed": body.recap_md is not None})
+    _audit(
+        db,
+        user,
+        "meetings.notes.update",
+        str(booking_id),
+        {
+            "prep_changed": body.prep_md is not None,
+            "recap_changed": body.recap_md is not None,
+        },
+    )
     _ = booking  # touched for audit context only
     return _notes_data(note)
 
@@ -398,7 +471,11 @@ def create_task(
         title=body.title.strip(),
         due_at=body.due_at,
         assignee=body.assignee,
-        order_index=body.order_index if body.order_index is not None else ((next_order or 0) + 1),
+        order_index=(
+            body.order_index
+            if body.order_index is not None
+            else ((next_order or 0) + 1)
+        ),
         created_by=getattr(user, "username", None) or getattr(user, "email", None),
     )
     db.add(task)
@@ -436,8 +513,13 @@ def update_task(
         task.done_at = datetime.now(timezone.utc) if body.done else None
     db.commit()
     db.refresh(task)
-    _audit(db, user, "meetings.task.update", str(booking_id),
-           {"task_id": str(task.id), "fields": body.model_dump(exclude_none=True)})
+    _audit(
+        db,
+        user,
+        "meetings.task.update",
+        str(booking_id),
+        {"task_id": str(task.id), "fields": body.model_dump(exclude_none=True)},
+    )
     return _task_row(task)
 
 
@@ -481,7 +563,9 @@ _DRAFT_INSTRUCTION = (
 def _prep_prompt(lead: MeetingLeadSummary, booking: Booking) -> str:
     hours_until = "—"
     if booking.scheduled_for:
-        delta = (booking.scheduled_for - datetime.now(timezone.utc)).total_seconds() / 3600
+        delta = (
+            booking.scheduled_for - datetime.now(timezone.utc)
+        ).total_seconds() / 3600
         hours_until = f"{delta:.1f}"
     parts = [
         _DRAFT_INSTRUCTION,
@@ -495,7 +579,9 @@ def _prep_prompt(lead: MeetingLeadSummary, booking: Booking) -> str:
         parts.append(f"Bio excerpt: {lead.bio_excerpt}")
     if lead.last_inbound_excerpt:
         parts.append(f"Last inbound reply: {lead.last_inbound_excerpt}")
-    parts.append(f"Meeting in {hours_until} hours · duration {booking.duration_min or 20} min")
+    parts.append(
+        f"Meeting in {hours_until} hours · duration {booking.duration_min or 20} min"
+    )
     return "\n".join(parts)
 
 
@@ -509,7 +595,11 @@ def _try_autodraft(
 ) -> tuple[MeetingNote, Optional[str]]:
     """Return (note, ai_skipped_reason). Never raises Gemini errors upstream."""
     note = db.query(MeetingNote).filter(MeetingNote.booking_id == booking.id).first()
-    needs_draft = force or (note is None) or (note.ai_drafted_at is None and (note.prep_md or "") == "")
+    needs_draft = (
+        force
+        or (note is None)
+        or (note.ai_drafted_at is None and (note.prep_md or "") == "")
+    )
     if not needs_draft:
         return note, None  # type: ignore[return-value]
 
@@ -546,7 +636,10 @@ def _try_autodraft(
     record_decision_row(
         db,
         request_type="meeting_prep",
-        request_payload={"booking_id": str(booking.id), "lead_id": str(booking.lead_id)},
+        request_payload={
+            "booking_id": str(booking.id),
+            "lead_id": str(booking.lead_id),
+        },
         response_payload={"chars": len(text_out)},
         cost_estimate_usd=cost_per_call_usd(),
     )
@@ -562,13 +655,18 @@ def force_ai_draft(
     user: User = Depends(require_operator),
 ) -> MeetingNoteData:
     if body.force and getattr(user, "role", "") != "admin":
-        raise HTTPException(status_code=403, detail="Admin role required for force=true")
+        raise HTTPException(
+            status_code=403, detail="Admin role required for force=true"
+        )
     booking = _get_booking_or_404(db, booking_id)
     lead = _lead_summary(leads_db, booking.lead_id) or MeetingLeadSummary(
         lead_id=booking.lead_id, name="(lead not found)"
     )
     note, skipped = _try_autodraft(
-        db, booking, lead, force=body.force,
+        db,
+        booking,
+        lead,
+        force=body.force,
         actor=getattr(user, "username", None) or getattr(user, "email", None),
     )
     payload = _notes_data(note)

@@ -20,7 +20,9 @@ class MeetingNote(Base):
     ai_drafted_at = Column(DateTime(timezone=True), nullable=True)
     ai_model = Column(Text, nullable=True)
     updated_by = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
