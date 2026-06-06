@@ -409,6 +409,7 @@ class TicketRow(BaseModel):
     resolved_at: Optional[datetime]
     response_time_min: Optional[float]
     human_verified: bool
+    human_override: bool = False
     suggestion: Optional["SuggestionDetail"] = None
 
     class Config:

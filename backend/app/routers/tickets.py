@@ -104,7 +104,7 @@ def list_tickets(
         text(
             "SELECT t.id, t.source, t.subject, t.body_preview, t.ai_category, "
             "t.ai_priority_score, t.ai_confidence, t.assigned_to, t.status, "
-            "t.human_verified, t.created_at, t.resolved_at, "
+            "t.human_verified, t.human_override, t.created_at, t.resolved_at, "
             "t.response_time_min, "
             "s.id AS s_id, s.entity_type AS s_entity_type, "
             "s.entity_id AS s_entity_id, s.payload AS s_payload, "
@@ -168,6 +168,7 @@ def list_tickets(
                 resolved_at=r["resolved_at"],
                 response_time_min=r["response_time_min"],
                 human_verified=r["human_verified"],
+                human_override=r["human_override"],
                 suggestion=suggestion,
             )
         )
