@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -108,9 +108,9 @@ def apply_suggestion(
 
 @router.get("/pending", response_model=PaginatedSuggestions)
 def list_pending(
-    entity_type: Optional[str] = None,
-    limit: int = 50,
-    offset: int = 0,
+    entity_type: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> PaginatedSuggestions:

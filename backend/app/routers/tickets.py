@@ -317,8 +317,8 @@ def triage_ticket(
 @router.get("/{ticket_id}/suggestions", response_model=PaginatedSuggestions)
 def list_ticket_suggestions(
     ticket_id: UUID,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> PaginatedSuggestions:
