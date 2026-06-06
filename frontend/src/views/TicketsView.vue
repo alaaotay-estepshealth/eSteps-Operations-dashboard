@@ -83,6 +83,48 @@
         <template #cell-priority="{ value }">
           <Badge :variant="value === 'high' ? 'error' : value === 'medium' ? 'warning' : 'default'">{{ value ?? 'normal' }}</Badge>
         </template>
+        <template #cell-ai_suggestion="{ row }">
+          <div class="min-w-[14rem]">
+            <button
+              v-if="!row.suggestion && !row.human_verified"
+              class="text-2xs text-status-info hover:underline disabled:opacity-50"
+              :disabled="suggestingId === row.id"
+              @click="getSuggestion(row)"
+            >
+              {{ suggestingId === row.id ? 'Asking AI…' : 'Get AI suggestion' }}
+            </button>
+
+            <SuggestionPill
+              v-else-if="row.suggestion?.status === 'pending'"
+              :payload="row.suggestion.payload"
+              :confidence="row.suggestion.confidence"
+              :operators="operators"
+              :busy="applyingId === row.suggestion.id"
+              @apply="(override) => applySuggestion(row, override)"
+              @reject="rejectSuggestion(row)"
+            />
+
+            <span v-else-if="row.human_verified" class="text-2xs text-status-ok">
+              ✓ AI triaged
+              <template v-if="row.suggestion?.applied_at"> · {{ relTime(row.suggestion.applied_at) }}</template>
+              <span
+                v-if="row.human_override"
+                class="ml-1 px-1 bg-status-warn-bg text-status-warn rounded text-3xs"
+              >overridden</span>
+            </span>
+
+            <button
+              v-else-if="row.suggestion?.status === 'rejected'"
+              class="text-2xs text-ctrl-muted hover:text-ctrl-text"
+              :disabled="suggestingId === row.id"
+              @click="getSuggestion(row)"
+            >
+              Suggestion rejected · re-ask
+            </button>
+
+            <span v-else class="text-2xs text-ctrl-muted">—</span>
+          </div>
+        </template>
       </Table>
 
       <div v-if="totalTickets > pageSize" class="flex items-center justify-between pt-4 border-t border-ctrl-border mt-4">
@@ -101,13 +143,14 @@
 import { computed, ref } from 'vue'
 import { useStaleFetch } from '../composables/useStaleFetch'
 import { AlertCircle, Layers, Ticket } from 'lucide-vue-next'
-import { ticketsAPI } from '../api/index.js'
+import { ticketsAPI, suggestionsAPI, usersAPI } from '../api/index.js'
 import { useAuthStore } from '../stores/auth.js'
 import Badge from '../components/ui/Badge.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
 import SectionContainer from '../components/ui/SectionContainer.vue'
 import StatRow from '../components/ui/StatRow.vue'
 import Table from '../components/ui/Table.vue'
+import SuggestionPill from '../components/SuggestionPill.vue'
 
 const auth         = useAuthStore()
 const isAdmin      = computed(() => auth.role === 'admin')
@@ -121,13 +164,17 @@ const offset       = ref(0)
 const pageSize     = 20
 const categories   = ref([])
 const ticketFilters = ref({ status: '', category: '' })
+const operators    = ref([])
+const suggestingId = ref(null)   // ticket id currently awaiting Gemini
+const applyingId   = ref(null)   // suggestion id currently being applied/rejected
 
 const ticketColumns = [
-  { key: 'created_at', label: 'Created' },
-  { key: 'subject',    label: 'Subject' },
-  { key: 'category',   label: 'Category' },
-  { key: 'status',     label: 'Status' },
-  { key: 'priority',   label: 'Priority' },
+  { key: 'created_at',    label: 'Created' },
+  { key: 'subject',       label: 'Subject' },
+  { key: 'category',      label: 'Category' },
+  { key: 'status',        label: 'Status' },
+  { key: 'priority',      label: 'Priority' },
+  { key: 'ai_suggestion', label: 'AI Triage' },
 ]
 
 const kpiStats = computed(() => {
@@ -161,6 +208,72 @@ async function updateStatus(id, newStatus) {
   }
 }
 
+async function loadOperators() {
+  try {
+    const { data } = await usersAPI.list()
+    operators.value = (data?.users || data || [])
+      .filter((u) => u.is_active && (u.role === 'admin' || u.role === 'operator'))
+      .map((u) => u.username)
+  } catch {
+    operators.value = []
+  }
+}
+
+async function getSuggestion(row) {
+  suggestingId.value = row.id
+  try {
+    const { data } = await ticketsAPI.aiTriage(row.id)
+    row.suggestion = data
+  } catch (err) {
+    const msg = err?.response?.data?.detail || 'AI triage failed'
+    error.value = msg
+  } finally {
+    suggestingId.value = null
+  }
+}
+
+async function applySuggestion(row, overridePayload = null) {
+  if (!row.suggestion) return
+  applyingId.value = row.suggestion.id
+  try {
+    const { data } = await suggestionsAPI.apply(row.suggestion.id, overridePayload)
+    row.suggestion = data
+    const applied = data.applied_payload || data.payload
+    row.ai_category = applied.category
+    row.ai_priority_score = applied.priority_score
+    row.human_verified = true
+    row.human_override = JSON.stringify(applied) !== JSON.stringify(data.payload)
+  } catch (err) {
+    const msg = err?.response?.data?.detail || 'Apply failed'
+    error.value = msg
+  } finally {
+    applyingId.value = null
+  }
+}
+
+async function rejectSuggestion(row) {
+  if (!row.suggestion) return
+  applyingId.value = row.suggestion.id
+  try {
+    const { data } = await suggestionsAPI.reject(row.suggestion.id, null)
+    row.suggestion = data
+  } catch (err) {
+    const msg = err?.response?.data?.detail || 'Reject failed'
+    error.value = msg
+  } finally {
+    applyingId.value = null
+  }
+}
+
+function relTime(iso) {
+  if (!iso) return ''
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000
+  if (diff < 60) return `${Math.round(diff)}s ago`
+  if (diff < 3600) return `${Math.round(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.round(diff / 3600)}h ago`
+  return `${Math.round(diff / 86400)}d ago`
+}
+
 async function loadTickets() {
   const params = { limit: pageSize, offset: offset.value }
   if (ticketFilters.value.status) params.status = ticketFilters.value.status
@@ -180,7 +293,7 @@ async function load() {
     const { data } = await ticketsAPI.getStats()
     stats.value = data
     categories.value = (data.category_breakdown ?? []).map((c) => c.category).filter(Boolean)
-    await loadTickets()
+    await Promise.all([loadTickets(), loadOperators()])
   } catch {
     error.value = 'Failed to load tickets.'
   } finally {
