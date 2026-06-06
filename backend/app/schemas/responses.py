@@ -1,8 +1,8 @@
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ─── Auth ────────────────────────────────────────────────────────────────────
@@ -409,6 +409,7 @@ class TicketRow(BaseModel):
     resolved_at: Optional[datetime]
     response_time_min: Optional[float]
     human_verified: bool
+    suggestion: Optional["SuggestionDetail"] = None
 
     class Config:
         from_attributes = True
@@ -643,3 +644,54 @@ class OpenMeetingTaskRow(BaseModel):
     title: str
     due_at: Optional[datetime] = None
     overdue_by_hours: Optional[float] = None
+
+
+# ── AI Suggestions ─────────────────────────────────────────────────────────
+
+
+class SuggestionPayloadTicket(BaseModel):
+    """Validated shape of a ticket-triage suggestion payload."""
+
+    category: Literal["billing", "technical", "partnership", "support"]
+    priority_score: int = Field(ge=1, le=5)
+    assigned_to: Optional[str] = None
+    rationale: str
+    confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+
+
+class SuggestionDetail(BaseModel):
+    id: UUID
+    entity_type: str
+    entity_id: UUID
+    payload: dict
+    applied_payload: Optional[dict] = None
+    model: str
+    confidence: Optional[float] = None
+    status: Literal["pending", "applied", "rejected", "superseded"]
+    rationale: Optional[str] = None
+    applied_at: Optional[datetime] = None
+    applied_by: Optional[str] = None
+    rejected_at: Optional[datetime] = None
+    rejected_by: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    ai_request_id: Optional[UUID] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SuggestionApplyBody(BaseModel):
+    override_payload: Optional[dict] = None
+
+
+class SuggestionRejectBody(BaseModel):
+    reason: Optional[str] = None
+
+
+class PaginatedSuggestions(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    suggestions: List[SuggestionDetail]
+
+
+TicketRow.model_rebuild()
