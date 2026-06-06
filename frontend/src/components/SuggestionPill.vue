@@ -36,6 +36,7 @@
     <div v-else class="mt-2 space-y-1.5">
       <div class="grid grid-cols-3 gap-2">
         <select v-model="draft.category"
+                aria-label="Category"
                 class="bg-ctrl-panel border border-ctrl-border rounded px-2 py-1 text-2xs text-ctrl-text focus:outline-none">
           <option value="billing">billing</option>
           <option value="technical">technical</option>
@@ -43,8 +44,10 @@
           <option value="support">support</option>
         </select>
         <input v-model.number="draft.priority_score" type="number" min="1" max="5"
+               aria-label="Priority score (1-5)"
                class="bg-ctrl-panel border border-ctrl-border rounded px-2 py-1 text-2xs text-ctrl-text focus:outline-none tabnum" />
         <select v-model="draft.assigned_to"
+                aria-label="Assignee"
                 class="bg-ctrl-panel border border-ctrl-border rounded px-2 py-1 text-2xs text-ctrl-text focus:outline-none">
           <option :value="null">(unassigned)</option>
           <option v-for="op in operators" :key="op" :value="op">{{ op }}</option>
