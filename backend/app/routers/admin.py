@@ -696,7 +696,9 @@ def get_system_health(
 ):
     from app.models.system import System
     systems = db.query(System).filter(System.is_active == True).all()
-    now = datetime.utcnow()
+    # tz-aware: WorkflowExecution.started_at is TIMESTAMPTZ — naive utcnow()
+    # would TypeError on the subtraction below.
+    now = datetime.now(timezone.utc)
     results = []
 
     for sys in systems:
