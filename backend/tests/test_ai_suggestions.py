@@ -35,6 +35,32 @@ def _fake_gemini_ok(prompt, timeout=30.0):
     )
 
 
+def _seed_pending_suggestion(db, ticket_id, *, payload=None):
+    sid = uuid4()
+    payload = payload or {
+        "category": "billing",
+        "priority_score": 4,
+        "assigned_to": None,
+        "rationale": "test",
+        "confidence": 0.8,
+    }
+    db.execute(
+        text(
+            "INSERT INTO ai_suggestions "
+            "(id, entity_type, entity_id, payload, model, confidence, status, rationale) "
+            "VALUES (:id, 'ticket', :tid, :p::jsonb, 'gemini-2.5-flash', 0.8, 'pending', "
+            "'test')"
+        ),
+        {
+            "id": str(sid),
+            "tid": str(ticket_id),
+            "p": json.dumps(payload),
+        },
+    )
+    db.commit()
+    return sid
+
+
 def test_triage_creates_pending_suggestion(monkeypatch, client, db, admin_token):
     monkeypatch.setattr("app.routers.tickets.call_gemini", _fake_gemini_ok)
     tid = _seed_ticket(db)
@@ -142,3 +168,78 @@ def test_triage_requires_operator_403_for_readonly(monkeypatch, client, db):
         headers={"Authorization": f"Bearer {readonly}"},
     )
     assert res.status_code == 403
+
+
+def test_apply_writes_to_ticket_and_marks_verified(client, db, admin_token):
+    tid = _seed_ticket(db)
+    sid = _seed_pending_suggestion(db, tid)
+
+    res = client.post(
+        f"/admin/suggestions/{sid}/apply",
+        json={},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["status"] == "applied"
+    assert body["applied_at"] is not None
+
+    ticket_row = db.execute(
+        text(
+            "SELECT ai_category, ai_priority_score, human_verified, human_override "
+            "FROM tickets WHERE id=:tid"
+        ),
+        {"tid": str(tid)},
+    ).mappings().first()
+    assert ticket_row["ai_category"] == "billing"
+    assert ticket_row["ai_priority_score"] == 4
+    assert ticket_row["human_verified"] is True
+    assert ticket_row["human_override"] is False
+
+
+def test_apply_with_override_flips_override_flag(client, db, admin_token):
+    tid = _seed_ticket(db)
+    sid = _seed_pending_suggestion(db, tid)
+
+    override = {
+        "category": "support",
+        "priority_score": 2,
+        "assigned_to": None,
+        "rationale": "operator disagrees",
+        "confidence": 0.9,
+    }
+    res = client.post(
+        f"/admin/suggestions/{sid}/apply",
+        json={"override_payload": override},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert res.status_code == 200
+    assert res.json()["applied_payload"]["category"] == "support"
+
+    ticket_row = db.execute(
+        text("SELECT ai_category, human_override FROM tickets WHERE id=:tid"),
+        {"tid": str(tid)},
+    ).mappings().first()
+    assert ticket_row["ai_category"] == "support"
+    assert ticket_row["human_override"] is True
+
+
+def test_apply_race_returns_409(client, db, admin_token):
+    tid = _seed_ticket(db)
+    sid = _seed_pending_suggestion(db, tid)
+    db.execute(
+        text(
+            "UPDATE ai_suggestions SET status='applied', applied_at=now(), "
+            "applied_by='someone-else' WHERE id=:id"
+        ),
+        {"id": str(sid)},
+    )
+    db.commit()
+
+    res = client.post(
+        f"/admin/suggestions/{sid}/apply",
+        json={},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert res.status_code == 409
+    assert "already" in res.text.lower()
