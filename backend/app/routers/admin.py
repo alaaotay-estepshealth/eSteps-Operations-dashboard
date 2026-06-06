@@ -12,7 +12,6 @@ from app.database import get_db, get_leads_db
 from app.config import settings
 from app.models.ai_request import AIRequest
 from app.models.audit_log import AuditLog
-from app.models.lead import Lead
 from app.models.workflow_execution import WorkflowExecution
 from app.models.user import User
 from app.schemas.responses import (

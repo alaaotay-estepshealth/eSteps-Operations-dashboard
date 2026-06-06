@@ -27,3 +27,7 @@ References/
 # ─── Meeting PDFs / reference material in root ──────────────────────────────
 *.pdf
 meet - *.pdf
+
+# operator-side smoke tools (do not commit)
+backend/_check_dbs.py
+backend/_seed_smoke.py

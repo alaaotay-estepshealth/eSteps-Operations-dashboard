@@ -73,7 +73,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email    ON users (email);
 
 
 -- =============================================================================
--- 4. LEAD PIPELINE  —  leads, email_logs, bookings, opportunities
+-- 4. LEAD PIPELINE  —  bookings (leads/email_logs/opportunities live in LEADS DB)
 --
 -- NOTE: in production the *real* leads/email_logs/bookings/opportunities live
 -- in the upstream eSteps Leads Supabase project (eu-central-1). The ops DB
@@ -81,76 +81,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email    ON users (email);
 -- backend/.env to read from the real source.
 -- =============================================================================
 
-CREATE TABLE IF NOT EXISTS leads (
-    id                      UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    lead_id                 VARCHAR(50),
-    created_at              TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at              TIMESTAMPTZ,
-    first_name              VARCHAR(100),
-    last_name               VARCHAR(100),
-    email                   VARCHAR(255),
-    institution             VARCHAR(255),
-    position                VARCHAR(100),
-    research_interest       VARCHAR(50),
-    research_area           TEXT,
-    lead_score              INTEGER      NOT NULL DEFAULT 0,
-    esteps_relevance_score  INTEGER      NOT NULL DEFAULT 0,
-    campaign_tag            VARCHAR(50),
-    source                  VARCHAR(100)  NOT NULL DEFAULT 'import',
-    status                  VARCHAR(50)   NOT NULL DEFAULT 'active',
-    -- Live stage vocabulary (mirrors backend/app/seed.py STAGES):
-    --   new | introduced | pitching | call_requested | engaged
-    -- | meeting_booked | cold | dead
-    stage                   VARCHAR(50)   NOT NULL DEFAULT 'new',
-    touch_number            INTEGER       NOT NULL DEFAULT 0,
-    reply_received          BOOLEAN       NOT NULL DEFAULT false,
-    meeting_booked_at       TIMESTAMPTZ,
-    processed_at            TIMESTAMPTZ,
-    process_duration_min    FLOAT,
-    ai_classified           BOOLEAN       NOT NULL DEFAULT false,
-    human_verified          BOOLEAN       NOT NULL DEFAULT false,
-    human_override          BOOLEAN       NOT NULL DEFAULT false,
-    linkedin_available      BOOLEAN       NOT NULL DEFAULT false,
-    linkedin_connected      BOOLEAN       NOT NULL DEFAULT false,
-    ab_variant              VARCHAR(1),
-    gdpr_consent            BOOLEAN       NOT NULL DEFAULT false
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS ix_leads_lead_id           ON leads (lead_id);
-CREATE UNIQUE INDEX IF NOT EXISTS ix_leads_email             ON leads (email);
-CREATE INDEX        IF NOT EXISTS ix_leads_research_interest ON leads (research_interest);
-CREATE INDEX        IF NOT EXISTS ix_leads_campaign_tag      ON leads (campaign_tag);
-CREATE INDEX        IF NOT EXISTS ix_leads_source            ON leads (source);
-CREATE INDEX        IF NOT EXISTS ix_leads_status            ON leads (status);
-CREATE INDEX        IF NOT EXISTS ix_leads_stage             ON leads (stage);
-
-
-CREATE TABLE IF NOT EXISTS email_logs (
-    id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ,
-    lead_id         UUID         NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
-    sequence_step   INTEGER      NOT NULL DEFAULT 1,
-    ab_variant      VARCHAR(1),
-    email_status    VARCHAR(50)  NOT NULL DEFAULT 'sent',
-    open_detected   BOOLEAN      NOT NULL DEFAULT false,
-    sent_at         TIMESTAMPTZ,
-    delivered_at    TIMESTAMPTZ,
-    subject         VARCHAR(255),
-    provider        VARCHAR(50),
-    message_id      VARCHAR(255),
-    bounce_reason   TEXT
-);
-
-CREATE INDEX IF NOT EXISTS ix_email_logs_lead_id      ON email_logs (lead_id);
-CREATE INDEX IF NOT EXISTS ix_email_logs_email_status ON email_logs (email_status);
-
+-- NOTE 2026-06-06: leads/email_logs/opportunities live in the LEADS Supabase
+-- project (eu-central-1, LEADS_DATABASE_URL). The OPS DB only owns `bookings`
+-- (meetings the dashboard manages) and joins to leads via a soft UUID reference
+-- — no FK constraint, since the parent row sits in a different database.
 
 CREATE TABLE IF NOT EXISTS bookings (
     id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ,
-    lead_id             UUID         NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+    lead_id             UUID         NOT NULL,
     status              VARCHAR(50)  NOT NULL DEFAULT 'scheduled',
     scheduled_for       TIMESTAMPTZ,
     completed_at        TIMESTAMPTZ,
@@ -162,23 +102,6 @@ CREATE TABLE IF NOT EXISTS bookings (
 
 CREATE INDEX IF NOT EXISTS ix_bookings_lead_id ON bookings (lead_id);
 CREATE INDEX IF NOT EXISTS ix_bookings_status  ON bookings (status);
-
-
-CREATE TABLE IF NOT EXISTS opportunities (
-    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at          TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at          TIMESTAMPTZ,
-    lead_id             UUID         NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
-    stage               VARCHAR(50)  NOT NULL DEFAULT 'meeting_booked',
-    partnership_tier    VARCHAR(50),
-    deal_value_usd      FLOAT,
-    expected_close_date TIMESTAMPTZ,
-    closed_at           TIMESTAMPTZ,
-    notes               TEXT
-);
-
-CREATE INDEX IF NOT EXISTS ix_opportunities_lead_id ON opportunities (lead_id);
-CREATE INDEX IF NOT EXISTS ix_opportunities_stage   ON opportunities (stage);
 
 
 -- =============================================================================

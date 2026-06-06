@@ -12,9 +12,6 @@ from sqlalchemy.orm import Session
 from app.auth import hash_password
 from app.database import SessionLocal, engine
 from app.models import (
-    Lead,
-    EmailLog,
-    Opportunity,
     Booking,
     Ticket,
     WorkflowExecution,
@@ -167,144 +164,6 @@ def seed_users(db: Session):
     print(f"  ✓ Users: {created} created, {updated} normalized")
 
 
-def seed_leads(db: Session, count: int = 972):
-    if db.query(Lead).count() > 0:
-        return
-    leads = []
-    tags = random.choices(
-        ["Priority_A", "Priority_B", "Priority_C", "Below_ICP"],
-        weights=[65, 295, 447, 165], k=count
-    )
-    for i, tag in enumerate(tags):
-        stage = random.choice(STAGES)
-        status = "inactive" if stage in ("dead", "cold") else "active"
-        touch = random.randint(0, 5) if stage not in ("new",) else 0
-        replied = random.random() < 0.03 if touch > 0 else False
-        meeting = datetime.utcnow() - timedelta(days=random.randint(1, 30)) if stage == "meeting_booked" else None
-        process_min = round(random.uniform(2.0, 6.5), 1)
-        processed = datetime.utcnow() - timedelta(days=random.randint(0, 30))
-
-        leads.append(Lead(
-            lead_id=f"EST-{i+1001:05d}",
-            first_name=fake.first_name(),
-            last_name=fake.last_name(),
-            email=fake.unique.email(),
-            institution=random.choice(INSTITUTIONS),
-            position=random.choice(["Professor", "Associate Professor", "Researcher", "PhD Student", "PI"]),
-            research_interest=random.choice(RESEARCH_INTERESTS),
-            lead_score=random.randint(4, 10) if tag in ("Priority_A", "Priority_B") else random.randint(1, 6),
-            esteps_relevance_score=random.randint(5, 10) if tag == "Priority_A" else random.randint(3, 8),
-            campaign_tag=tag,
-            source=random.choice(LEAD_SOURCES),
-            status=status,
-            stage=stage,
-            touch_number=touch,
-            reply_received=replied,
-            meeting_booked_at=meeting,
-            processed_at=processed,
-            process_duration_min=process_min,
-            ai_classified=random.random() < 0.87,
-            human_verified=random.random() < 0.15,
-            human_override=random.random() < 0.08,
-            linkedin_available=random.random() < 0.93,
-            linkedin_connected=random.random() < 0.20,
-            ab_variant=random.choice(["A", "B"]),
-            gdpr_consent=True,
-            created_at=datetime.utcnow() - timedelta(days=random.randint(1, 60)),
-        ))
-    db.add_all(leads)
-    db.commit()
-    print(f"  ✓ Created {count} leads")
-
-
-def seed_email_logs(db: Session):
-    if db.query(EmailLog).count() > 0:
-        return
-    logs = []
-    leads = db.query(Lead).all()
-    for lead in leads:
-        if not lead.touch_number or lead.touch_number <= 0:
-            continue
-        touches = min(lead.touch_number, 5)
-        for step in range(1, touches + 1):
-            status = random.choices(["sent", "delivered", "bounced"], weights=[65, 30, 5], k=1)[0]
-            open_detected = status != "bounced" and random.random() < 0.22
-            sent_at = lead.created_at + timedelta(days=random.randint(0, 20), hours=random.randint(0, 23))
-            delivered_at = sent_at + timedelta(minutes=random.randint(1, 60)) if status != "bounced" else None
-            logs.append(EmailLog(
-                lead_id=lead.id,
-                sequence_step=step,
-                ab_variant=lead.ab_variant,
-                email_status=status,
-                open_detected=open_detected,
-                sent_at=sent_at,
-                delivered_at=delivered_at,
-                subject=f"eSteps intro for {lead.research_interest}",
-                provider=random.choice(EMAIL_PROVIDERS),
-                message_id=f"msg_{uuid.uuid4().hex[:12]}",
-                bounce_reason=None if status != "bounced" else "mailbox_full",
-            ))
-    db.add_all(logs)
-    db.commit()
-    print(f"  ✓ Created {len(logs)} email logs")
-
-
-def seed_bookings(db: Session):
-    if db.query(Booking).count() > 0:
-        return
-    bookings = []
-    leads = db.query(Lead).filter(Lead.meeting_booked_at.isnot(None)).all()
-    for lead in leads:
-        status = random.choice(BOOKING_STATUSES)
-        no_show = status == "no_show"
-        completed_at = lead.meeting_booked_at + timedelta(hours=1) if status == "completed" else None
-        canceled_at = lead.meeting_booked_at - timedelta(hours=2) if status == "canceled" else None
-        bookings.append(Booking(
-            lead_id=lead.id,
-            status=status,
-            scheduled_for=lead.meeting_booked_at,
-            completed_at=completed_at,
-            canceled_at=canceled_at,
-            no_show_detected=no_show,
-            source="calendly",
-            external_id=f"cal_{uuid.uuid4().hex[:10]}",
-        ))
-    db.add_all(bookings)
-    db.commit()
-    print(f"  ✓ Created {len(bookings)} bookings")
-
-
-def seed_opportunities(db: Session):
-    if db.query(Opportunity).count() > 0:
-        return
-    opportunities = []
-    leads = db.query(Lead).filter(Lead.meeting_booked_at.isnot(None)).all()
-    for lead in leads:
-        if random.random() < 0.35:
-            continue
-        stage = random.choices(OPPORTUNITY_STAGES, weights=[25, 20, 18, 15, 12, 10], k=1)[0]
-        tier = random.choice(PARTNERSHIP_TIERS)
-        deal_value = {
-            "pilot": random.randint(4000, 9000),
-            "research_partner": random.randint(12000, 22000),
-            "strategic_partner": random.randint(40000, 80000),
-        }[tier]
-        expected_close = lead.meeting_booked_at + timedelta(days=random.randint(10, 60))
-        closed_at = expected_close if stage == "closed_won" else None
-        opportunities.append(Opportunity(
-            lead_id=lead.id,
-            stage=stage,
-            partnership_tier=tier,
-            deal_value_usd=float(deal_value),
-            expected_close_date=expected_close,
-            closed_at=closed_at,
-            notes=fake.sentence(nb_words=10),
-        ))
-    db.add_all(opportunities)
-    db.commit()
-    print(f"  ✓ Created {len(opportunities)} opportunities")
-
-
 def seed_workflow_executions(db: Session, systems: dict, count: int = 500):
     if db.query(WorkflowExecution).count() > 0:
         return
@@ -448,10 +307,9 @@ def run():
     try:
         seed_users(db)
         systems = seed_systems(db)
-        seed_leads(db)
-        seed_email_logs(db)
-        seed_bookings(db)
-        seed_opportunities(db)
+        # leads/email_logs/opportunities now live in the LEADS Supabase project
+        # (eu-central-1, LEADS_DATABASE_URL). Bookings join via a soft UUID
+        # reference, so don't fabricate them here without a real lead UUID.
         seed_workflow_executions(db, systems)
         seed_ai_requests(db, systems)
         seed_audit_logs(db, systems)
