@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
-from app.database import get_leads_db
+from app.database import get_db, get_leads_db
 from app.models.user import User
 from app.schemas.responses import BookingRow, BookingStats, PaginatedBookings
 
@@ -150,13 +150,12 @@ def list_bookings(
 def calendar_meetings(
     from_: Optional[date] = Query(None, alias="from"),
     to: Optional[date] = Query(None),
-    db: Session = Depends(get_leads_db),
+    leads_db: Session = Depends(get_leads_db),
+    db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """All scheduled meetings in a date window — feeds the calendar view."""
     today = date.today()
     start = from_ or (today.replace(day=1))
-    # End of next month if no `to` was given.
     if to is None:
         next_month_first = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
         end = (next_month_first.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
@@ -165,30 +164,87 @@ def calendar_meetings(
     if end < start:
         raise HTTPException(status_code=400, detail="`to` must be >= `from`")
 
-    rows = db.execute(text(
-        """
-        SELECT lead_id,
-               CONCAT(first_name, ' ', last_name) AS lead_name,
-               institution,
-               meeting_scheduled_for AS when_,
-               CASE WHEN meeting_scheduled_for <= now() THEN 'past' ELSE 'upcoming' END AS status
-        FROM leads
-        WHERE meeting_scheduled_for IS NOT NULL
-          AND meeting_scheduled_for >= :start
-          AND meeting_scheduled_for <  :end_excl
-        ORDER BY meeting_scheduled_for ASC
-        """
-    ), {"start": start, "end_excl": end + timedelta(days=1)}).mappings().all()
+    # Bookings table (ops) first — these can have booking_id / notes / tasks.
+    booking_rows = db.execute(
+        text(
+            "SELECT id AS booking_id, lead_id, scheduled_for, status "
+            "FROM bookings WHERE scheduled_for >= :start AND scheduled_for < :end_excl "
+            "ORDER BY scheduled_for ASC"
+        ),
+        {"start": start, "end_excl": end + timedelta(days=1)},
+    ).mappings().all()
 
-    meetings = [
-        CalendarMeeting(
-            lead_id=r["lead_id"],
-            lead_name=r["lead_name"],
-            institution=r["institution"],
-            when=r["when_"],
-            source="lead",
-            status=r["status"],
-        )
-        for r in rows
-    ]
-    return {"from": start.isoformat(), "to": end.isoformat(), "meetings": [m.model_dump(mode="json") for m in meetings]}
+    booking_ids = [r["booking_id"] for r in booking_rows]
+    has_notes = {
+        str(b)
+        for (b,) in db.execute(
+            text("SELECT booking_id FROM meeting_notes WHERE booking_id = ANY(:ids)"),
+            {"ids": [str(i) for i in booking_ids]},
+        ).all() if booking_ids
+    }
+    open_counts = {
+        str(bid): int(cnt)
+        for bid, cnt in db.execute(
+            text("SELECT booking_id, count(*) FROM meeting_tasks "
+                 "WHERE done = FALSE AND booking_id = ANY(:ids) GROUP BY booking_id"),
+            {"ids": [str(i) for i in booking_ids]},
+        ).all() if booking_ids
+    }
+
+    lead_ids = list({r["lead_id"] for r in booking_rows})
+    leads_by_id = {}
+    if lead_ids:
+        for r in leads_db.execute(
+            text("SELECT id, CONCAT(first_name, ' ', last_name) AS name, institution "
+                 "FROM leads WHERE id = ANY(:ids)"),
+            {"ids": [str(i) for i in lead_ids]},
+        ).mappings().all():
+            leads_by_id[str(r["id"])] = r
+
+    bookings_payload = []
+    seen_lead_times: set = set()
+    for r in booking_rows:
+        lead = leads_by_id.get(str(r["lead_id"]), {})
+        when = r["scheduled_for"]
+        seen_lead_times.add((str(r["lead_id"]), when.isoformat() if when else None))
+        bookings_payload.append({
+            "booking_id": str(r["booking_id"]),
+            "lead_id": str(r["lead_id"]),
+            "lead_name": lead.get("name"),
+            "institution": lead.get("institution"),
+            "when": when.isoformat() if when else None,
+            "source": "booking",
+            "status": "past" if when and when < datetime.now(tz=when.tzinfo).replace(tzinfo=when.tzinfo) else "upcoming",
+            "open_task_count": open_counts.get(str(r["booking_id"]), 0),
+            "has_notes": str(r["booking_id"]) in has_notes,
+        })
+
+    # Fallback: lead-derived meetings without a bookings row yet.
+    rows = leads_db.execute(
+        text(
+            "SELECT id AS lead_id, CONCAT(first_name, ' ', last_name) AS lead_name, "
+            "institution, meeting_scheduled_for AS when_ "
+            "FROM leads WHERE meeting_scheduled_for IS NOT NULL "
+            "AND meeting_scheduled_for >= :start AND meeting_scheduled_for < :end_excl "
+            "ORDER BY meeting_scheduled_for ASC"
+        ),
+        {"start": start, "end_excl": end + timedelta(days=1)},
+    ).mappings().all()
+    for r in rows:
+        when = r["when_"]
+        key = (str(r["lead_id"]), when.isoformat() if when else None)
+        if key in seen_lead_times:
+            continue
+        bookings_payload.append({
+            "booking_id": None,
+            "lead_id": str(r["lead_id"]),
+            "lead_name": r["lead_name"],
+            "institution": r["institution"],
+            "when": when.isoformat() if when else None,
+            "source": "lead",
+            "status": "past" if when and when <= datetime.now(tz=when.tzinfo).replace(tzinfo=when.tzinfo) else "upcoming",
+            "open_task_count": 0,
+            "has_notes": False,
+        })
+
+    return {"from": start.isoformat(), "to": end.isoformat(), "meetings": bookings_payload}

@@ -45,6 +45,21 @@ def get_briefing(
     upcoming_meetings = lq("SELECT count(*) FROM leads WHERE meeting_scheduled_for >= now()")
     hot_uncontacted = lq(f"SELECT count(*) FROM leads WHERE lead_score >= 7 AND email1_sent_at IS NULL AND {_ACTIVE}")
 
+    try:
+        open_meeting_tasks = db.execute(
+            text("SELECT count(*) FROM meeting_tasks WHERE done = FALSE")
+        ).scalar() or 0
+    except Exception:
+        open_meeting_tasks = 0
+    try:
+        meetings_today = db.execute(
+            text("SELECT count(*) FROM bookings "
+                 "WHERE scheduled_for >= date_trunc('day', now()) "
+                 "AND scheduled_for <  date_trunc('day', now()) + interval '1 day'")
+        ).scalar() or 0
+    except Exception:
+        meetings_today = 0
+
     return {
         "generated_at": now.isoformat(),
         "overnight": {
@@ -60,5 +75,7 @@ def get_briefing(
             "due_today": due_today,
             "upcoming_meetings": upcoming_meetings,
             "hot_uncontacted": hot_uncontacted,
+            "meeting_open_tasks": open_meeting_tasks,
+            "meetings_today": meetings_today,
         },
     }

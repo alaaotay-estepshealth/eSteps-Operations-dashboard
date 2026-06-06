@@ -3,12 +3,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
-from app.database import get_leads_db
+from app.database import get_db, get_leads_db
 from app.models.user import User
 
 router = APIRouter(prefix="/admin/followups", tags=["followups"])
 
-# Leads that are still in an active outreach state
 ACTIVE = "stage NOT IN ('cold', 'dead', 'bounced', 'Cold')"
 
 _FIELDS = (
@@ -30,9 +29,49 @@ def _section(db: Session, where: str, order: str = "next_send_date ASC NULLS LAS
     return {"count": count, "leads": [dict(r) for r in rows]}
 
 
+def _open_meeting_tasks(db: Session, leads_db: Session, limit: int = 30) -> dict:
+    rows = db.execute(
+        text(
+            "SELECT t.id AS task_id, t.booking_id, t.title, t.due_at, "
+            "b.lead_id, "
+            "EXTRACT(EPOCH FROM (now() - t.due_at))/3600 AS overdue_h "
+            "FROM meeting_tasks t JOIN bookings b ON b.id = t.booking_id "
+            "WHERE t.done = FALSE AND t.due_at IS NOT NULL AND t.due_at < now() "
+            "ORDER BY t.due_at ASC LIMIT :limit"
+        ),
+        {"limit": limit},
+    ).mappings().all()
+    if not rows:
+        return {"count": 0, "tasks": []}
+
+    lead_ids = list({str(r["lead_id"]) for r in rows})
+    lead_names = {}
+    if lead_ids:
+        for r in leads_db.execute(
+            text("SELECT id, CONCAT(first_name, ' ', last_name) AS name "
+                 "FROM leads WHERE id = ANY(:ids)"),
+            {"ids": lead_ids},
+        ).mappings().all():
+            lead_names[str(r["id"])] = r["name"]
+
+    tasks = [
+        {
+            "task_id": str(r["task_id"]),
+            "booking_id": str(r["booking_id"]),
+            "lead_name": lead_names.get(str(r["lead_id"])),
+            "title": r["title"],
+            "due_at": r["due_at"].isoformat() if r["due_at"] else None,
+            "overdue_by_hours": round(float(r["overdue_h"]), 1) if r["overdue_h"] else None,
+        }
+        for r in rows
+    ]
+    return {"count": len(tasks), "tasks": tasks}
+
+
 @router.get("")
 def get_followups(
     leads_db: Session = Depends(get_leads_db),
+    db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     return {
@@ -50,4 +89,5 @@ def get_followups(
             f"lead_score >= 7 AND email1_sent_at IS NOT NULL AND next_send_date < CURRENT_DATE AND {ACTIVE}",
             order="lead_score DESC, next_send_date ASC",
         ),
+        "open_meeting_tasks": _open_meeting_tasks(db, leads_db),
     }
