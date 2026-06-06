@@ -209,7 +209,7 @@ def _parse_and_validate_triage(raw: str, operators: Set[str]) -> dict:
 
     if data.get("category") not in _VALID_CATEGORIES:
         raise HTTPException(
-            status_code=502, detail=f"Invalid category: {data.get('category')!r}"
+            status_code=502, detail=f"Invalid category: {str(data.get('category'))[:40]!r}"
         )
     pri = data.get("priority_score")
     if not isinstance(pri, int) or not 1 <= pri <= 5:
@@ -243,7 +243,12 @@ def triage_ticket(
     db: Session = Depends(get_db),
     user: User = Depends(require_operator),
 ) -> SuggestionDetail:
-    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    ticket = (
+        db.query(Ticket)
+        .filter(Ticket.id == ticket_id)
+        .with_for_update()
+        .first()
+    )
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
     if ticket.status == "resolved":
