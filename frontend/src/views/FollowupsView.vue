@@ -21,22 +21,30 @@
     >
       <Table
         :columns="columnsFor(sec)"
-        :rows="data[sec.key]?.leads ?? []"
+        :rows="sec.isTaskList ? (data[sec.key]?.tasks ?? []) : (data[sec.key]?.leads ?? [])"
         :loading="loading"
         :skeleton-rows="4"
         :empty-message="sec.empty"
         :empty-icon="sec.icon"
       >
         <template #cell-name="{ row }">
-          <button @click="openContact(row.lead_id)" class="font-medium text-ctrl-text hover:text-status-info transition-colors text-left">
-            {{ row.name }}
-          </button>
+          <button
+            v-if="row.booking_id"
+            @click="openMeeting(row.booking_id)"
+            class="font-medium text-ctrl-text hover:text-status-info transition-colors text-left"
+          >{{ row.name || row.lead_name || '—' }}</button>
+          <button
+            v-else
+            @click="openContact(row.lead_id)"
+            class="font-medium text-ctrl-text hover:text-status-info transition-colors text-left"
+          >{{ row.name || row.lead_name || '—' }}</button>
         </template>
+        <template #cell-title="{ row }"><span class="text-ctrl-muted">{{ row.title || '—' }}</span></template>
         <template #cell-institution="{ value }"><span class="text-ctrl-muted">{{ value || '—' }}</span></template>
         <template #cell-lead_score="{ value }"><span class="tabnum font-semibold" :class="scoreColor(value)">{{ value }}</span></template>
         <template #cell-stage="{ value }"><span class="text-ctrl-dim text-xs capitalize">{{ value }}</span></template>
         <template #cell-date="{ row }">
-          <span class="tabnum text-xs" :class="sec.tone === 'err' ? 'text-status-err' : 'text-ctrl-muted'">
+          <span class="tabnum text-xs" :class="(sec.tone === 'err' || (sec.isTaskList && row.overdue_by_hours)) ? 'text-status-err' : 'text-ctrl-muted'">
             {{ fmtDate(row[sec.dateField]) }}
           </span>
         </template>
@@ -51,6 +59,12 @@
       </Table>
     </SectionContainer>
 
+    <MeetingDrawer
+      :open="drawerOpen"
+      :booking-id="drawerBookingId"
+      @close="drawerOpen = false"
+    />
+
   </div>
 </template>
 
@@ -64,6 +78,7 @@ import { useAuthStore } from '../stores/auth.js'
 import SectionContainer from '../components/ui/SectionContainer.vue'
 import StatRow from '../components/ui/StatRow.vue'
 import Table from '../components/ui/Table.vue'
+import MeetingDrawer from '../components/MeetingDrawer.vue'
 
 const router   = useRouter()
 const auth     = useAuthStore()
@@ -73,15 +88,31 @@ const loading  = ref(false)
 const error    = ref('')
 const actingId = ref(null)
 
+const drawerOpen = ref(false)
+const drawerBookingId = ref(null)
+
+function openMeeting(bookingId) {
+  drawerBookingId.value = bookingId
+  drawerOpen.value = true
+}
+
 const sections = [
   { key: 'overdue',           title: 'Overdue Follow-ups',  dateField: 'next_send_date',      tone: 'err',  icon: AlertCircle,     empty: 'No overdue follow-ups' },
   { key: 'due_today',         title: 'Due Today',           dateField: 'next_send_date',      tone: 'warn', icon: Clock,           empty: 'Nothing due today' },
   { key: 'this_week',         title: 'This Week',           dateField: 'next_send_date',      tone: '',     icon: CalendarClock,   empty: 'Nothing scheduled this week' },
   { key: 'upcoming_meetings', title: 'Upcoming Meetings',   dateField: 'meeting_scheduled_for', tone: '',   icon: CalendarCheck,   empty: 'No upcoming meetings', noActions: true },
   { key: 'hot_needs_action',  title: 'Hot Leads Needing Action', dateField: 'next_send_date', tone: 'err',  icon: Flame,           empty: 'No hot leads waiting' },
+  { key: 'open_meeting_tasks', title: 'Open Meeting Tasks',  dateField: 'due_at',              tone: 'warn', icon: Clock,           empty: 'No open meeting tasks', noActions: true, isTaskList: true },
 ]
 
 function columnsFor(sec) {
+  if (sec.isTaskList) {
+    return [
+      { key: 'name',  label: 'Lead' },
+      { key: 'title', label: 'Task' },
+      { key: 'date',  label: 'Due' },
+    ]
+  }
   const cols = [
     { key: 'name',         label: 'Name' },
     { key: 'institution',  label: 'Institution' },
