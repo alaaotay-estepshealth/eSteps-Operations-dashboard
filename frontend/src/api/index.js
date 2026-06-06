@@ -101,6 +101,7 @@ export const ticketsAPI = {
   getStats: () => api.get('/admin/tickets/stats'),
   list: (params = {}) => api.get('/admin/tickets', { params }),
   updateStatus: (id, data) => api.patch(`/admin/tickets/${id}/status`, data),
+  aiTriage: (ticketId) => api.post(`/admin/tickets/${ticketId}/ai-triage`),
 }
 
 export const calendarAPI = {
@@ -158,6 +159,15 @@ export const meetingsAPI = {
   aiDraft: (bookingId, force = false) =>
     api.post(`/admin/meetings/${bookingId}/ai-draft`, { force }),
   sync: (body = { source: 'manual' }) => api.post('/admin/meetings/sync', body),
+}
+
+export const suggestionsAPI = {
+  apply:    (id, overridePayload) =>
+    api.post(`/admin/suggestions/${id}/apply`, { override_payload: overridePayload || null }),
+  reject:   (id, reason) =>
+    api.post(`/admin/suggestions/${id}/reject`, { reason: reason || null }),
+  pending:  (params = {}) => api.get('/admin/suggestions/pending', { params }),
+  forTicket: (ticketId) => api.get(`/admin/tickets/${ticketId}/suggestions`),
 }
 
 export default api
