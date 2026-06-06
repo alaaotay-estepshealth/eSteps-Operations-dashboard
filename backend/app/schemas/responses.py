@@ -401,10 +401,10 @@ class TicketRow(BaseModel):
     source: str
     subject: str
     body_preview: Optional[str]
-    ai_category: str
-    ai_priority_score: int
-    ai_confidence: float
-    assigned_to: str
+    ai_category: Optional[str] = None
+    ai_priority_score: Optional[int] = None
+    ai_confidence: Optional[float] = None
+    assigned_to: Optional[str] = None
     status: str
     resolved_at: Optional[datetime]
     response_time_min: Optional[float]

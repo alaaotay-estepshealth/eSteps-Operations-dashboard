@@ -355,7 +355,7 @@ def triage_ticket(
         model=GEMINI_MODEL,
         confidence=parsed.get("confidence"),
         rationale=parsed.get("rationale"),
-        ai_request_id=ai_req_id,
+        ai_request_id=UUID(ai_req_id) if ai_req_id else None,
         status="pending",
     )
     db.add(suggestion)

@@ -29,14 +29,22 @@ def write_audit(
     """
     try:
         from app.models.audit_log import AuditLog
+        import uuid as _uuid
+
+        # Map resource_id to entity_id only if it's a parseable UUID; else leave null.
+        try:
+            ent_id = _uuid.UUID(resource_id) if resource_id else None
+        except (ValueError, TypeError):
+            ent_id = None
 
         row = AuditLog(
-            user_id=getattr(user, "id", None),
-            action=action,
-            resource=resource_type,
-            resource_id=str(resource_id),
-            changes=payload or {},
-            status=status,
+            user_id=str(getattr(user, "id", "") or "") or None,
+            level="INFO" if status == "success" else "ERROR",
+            source=action,  # e.g. "ai.triage.request"
+            message=action,  # operator-readable; consider extending if useful
+            entity_type=resource_type,
+            entity_id=ent_id,
+            metadata_=payload or {},
         )
         db.add(row)
         db.commit()
