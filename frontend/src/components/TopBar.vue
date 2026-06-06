@@ -55,7 +55,6 @@ const titles = {
   '/agent':         'OpenClaw Agent',
   '/emails':        'Email Analytics',
   '/opportunities': 'Opportunities & Deals',
-  '/bookings':      'Bookings',
   '/calendar':      'Meeting Calendar',
   '/meets':         'Meeting Prep',
   '/tickets':       'Tickets',

@@ -102,7 +102,6 @@ const nav = [
   { to: '/pipeline',      label: 'Pipeline',      icon: TrendingUp,      section: 'Pipeline',    roles: ALL },
   { to: '/contacts',      label: 'Contacts',      icon: Users,           section: 'Pipeline',    roles: ALL },
   { to: '/emails',        label: 'Email Analytics', icon: Mail,          section: 'Pipeline',    roles: ALL },
-  { to: '/bookings',      label: 'Bookings',      icon: CalendarCheck,   section: 'Pipeline',    roles: ALL },
   { to: '/calendar',      label: 'Calendar',      icon: CalendarDays,    section: 'Pipeline',    roles: ALL },
   { to: '/meets',         label: 'Meet Prep',     icon: FolderKanban,    section: 'Pipeline',    roles: ALL },
   { to: '/opportunities', label: 'Deals',         icon: HeartHandshake,  section: 'Pipeline',    roles: OPS },

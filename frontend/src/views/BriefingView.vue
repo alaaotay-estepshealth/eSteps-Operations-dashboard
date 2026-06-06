@@ -31,7 +31,7 @@
           <div class="font-display text-2xs uppercase tracking-label text-ctrl-muted mb-2">Hot Uncontacted</div>
           <div class="tabnum text-2xl font-semibold text-ctrl-text">{{ b.priorities?.hot_uncontacted ?? 0 }}</div>
         </button>
-        <button @click="go('/bookings')" class="text-left bg-ctrl-panel border border-ctrl-border rounded p-4 transition-all duration-200 hover:bg-ctrl-raised hover:shadow-float active:scale-[0.99]">
+        <button @click="go('/calendar')" class="text-left bg-ctrl-panel border border-ctrl-border rounded p-4 transition-all duration-200 hover:bg-ctrl-raised hover:shadow-float active:scale-[0.99]">
           <div class="font-display text-2xs uppercase tracking-label text-ctrl-muted mb-2">Upcoming Meetings</div>
           <div class="tabnum text-2xl font-semibold text-status-ok">{{ b.priorities?.upcoming_meetings ?? 0 }}</div>
         </button>

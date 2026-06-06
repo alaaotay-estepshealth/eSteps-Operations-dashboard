@@ -7,10 +7,11 @@
     </div>
 
     <StatRow :stats="[
-      { label: 'In window',  value: meetings.length, sub: windowLabel },
-      { label: 'Upcoming',    value: upcoming,        status: upcoming > 0 ? 'ok' : undefined },
-      { label: 'Past',        value: past,            sub: 'in window' },
-      { label: 'Next 7 days', value: nextWeek,        status: nextWeek > 0 ? 'info' : undefined },
+      { label: 'Upcoming',     value: bookingStats.upcoming ?? upcoming,      status: 'info' },
+      { label: 'Completed',    value: bookingStats.completed ?? 0,            status: 'ok' },
+      { label: 'No-shows',     value: bookingStats.no_show ?? 0,              status: (bookingStats.no_show ?? 0) > 0 ? 'warn' : undefined },
+      { label: 'No-show rate', value: `${(bookingStats.no_show_rate_pct ?? 0).toFixed(1)}%`, status: (bookingStats.no_show_rate_pct ?? 0) > 15 ? 'err' : undefined },
+      { label: 'Next 7 days',  value: nextWeek,                               status: nextWeek > 0 ? 'info' : undefined },
     ]" />
 
     <SectionContainer :title="windowLabel" subtitle="15-day window of scheduled meetings — click a card to open the contact">
@@ -82,6 +83,42 @@
       </Table>
     </SectionContainer>
 
+    <SectionContainer title="Past meetings" subtitle="Completed and no-show bookings">
+      <template #action>
+        <select v-model="pastStatusFilter" @change="loadPast()" class="bg-ctrl-panel border border-ctrl-border rounded text-xs text-ctrl-text px-2 py-1.5 focus:outline-none">
+          <option value="">All status</option>
+          <option value="completed">Completed</option>
+          <option value="no_show">No Show</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </template>
+      <Table
+        :columns="pastColumns"
+        :rows="pastRows"
+        :loading="pastLoading"
+        :skeleton-rows="6"
+        empty-message="No past meetings"
+        :empty-icon="CalendarCheck"
+      >
+        <template #cell-scheduled_for="{ value }"><span class="tabnum text-ctrl-muted">{{ fmtDateTime(value) }}</span></template>
+        <template #cell-lead_name="{ row }">
+          <button v-if="row.lead_id" @click="openLead(row.lead_id)" class="font-medium text-ctrl-text hover:text-status-info text-left">{{ row.lead_name || '—' }}</button>
+          <span v-else class="text-ctrl-muted">{{ row.lead_name || '—' }}</span>
+        </template>
+        <template #cell-institution="{ value }"><span class="text-ctrl-muted">{{ value || '—' }}</span></template>
+        <template #cell-status="{ value }">
+          <span class="text-2xs px-2 py-0.5 rounded border" :class="pastVariant(value)">{{ value }}</span>
+        </template>
+      </Table>
+      <div v-if="pastTotal > pastPageSize" class="flex items-center justify-between pt-4 border-t border-ctrl-border mt-4">
+        <span class="text-2xs text-ctrl-muted tabnum">{{ pastOffset + 1 }}–{{ Math.min(pastOffset + pastPageSize, pastTotal) }} of {{ pastTotal }}</span>
+        <div class="flex gap-2">
+          <button @click="pastOffset = Math.max(0, pastOffset - pastPageSize); loadPast()" :disabled="pastOffset === 0" class="px-3 py-1 text-xs border border-ctrl-border rounded text-ctrl-muted hover:text-ctrl-text disabled:opacity-30 transition-all">Prev</button>
+          <button @click="pastOffset += pastPageSize; loadPast()" :disabled="pastOffset + pastPageSize >= pastTotal" class="px-3 py-1 text-xs border border-ctrl-border rounded text-ctrl-muted hover:text-ctrl-text disabled:opacity-30 transition-all">Next</button>
+        </div>
+      </div>
+    </SectionContainer>
+
   </div>
 </template>
 
@@ -89,7 +126,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AlertCircle, CalendarCheck } from 'lucide-vue-next'
-import { calendarAPI } from '../api/index.js'
+import { calendarAPI, bookingsAPI } from '../api/index.js'
 import SectionContainer from '../components/ui/SectionContainer.vue'
 import StatRow from '../components/ui/StatRow.vue'
 import Table from '../components/ui/Table.vue'
@@ -177,6 +214,45 @@ function shift(n) { start.value = addDays(start.value, n) }
 function goToday() { start.value = startOfWeekMonday(new Date()) }
 function openLead(leadId) { if (leadId) router.push({ path: '/contacts', query: { lead: leadId } }) }
 
+// ── Past meetings + booking stats (merged in from old /bookings view) ──────────
+const bookingStats   = ref({})
+const pastRows       = ref([])
+const pastTotal      = ref(0)
+const pastOffset     = ref(0)
+const pastPageSize   = 20
+const pastLoading    = ref(false)
+const pastStatusFilter = ref('')
+
+const pastColumns = [
+  { key: 'scheduled_for', label: 'Scheduled' },
+  { key: 'lead_name',     label: 'Lead' },
+  { key: 'institution',   label: 'Institution' },
+  { key: 'status',        label: 'Status' },
+]
+
+function pastVariant(s) {
+  switch (s) {
+    case 'completed': return 'border-status-ok text-status-ok bg-status-ok-bg'
+    case 'no_show':   return 'border-status-err text-status-err bg-status-err-bg'
+    case 'cancelled': return 'border-status-warn text-status-warn bg-status-warn-bg'
+    default:          return 'border-ctrl-border text-ctrl-muted'
+  }
+}
+
+async function loadPast() {
+  pastLoading.value = true
+  try {
+    const params = { limit: pastPageSize, offset: pastOffset.value }
+    if (pastStatusFilter.value) params.status = pastStatusFilter.value
+    const { data } = await bookingsAPI.list(params)
+    const all = data.bookings ?? data
+    const now = Date.now()
+    pastRows.value = all.filter(b => new Date(b.scheduled_for).getTime() <= now || b.status !== 'scheduled')
+    pastTotal.value = data.total ?? all.length
+  } catch { /* surfaced via main error banner */ }
+  finally { pastLoading.value = false }
+}
+
 async function load() {
   loading.value = true
   error.value = ''
@@ -190,6 +266,11 @@ async function load() {
   } finally {
     loading.value = false
   }
+  try {
+    const { data } = await bookingsAPI.getStats()
+    bookingStats.value = data || {}
+  } catch { /* non-fatal */ }
+  await loadPast()
 }
 
 watch(start, load, { immediate: true })
