@@ -1,4 +1,5 @@
 """AI suggestion lifecycle tests — triage, apply, reject, read, RBAC, race."""
+
 import json
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -184,13 +185,17 @@ def test_apply_writes_to_ticket_and_marks_verified(client, db, admin_token):
     assert body["status"] == "applied"
     assert body["applied_at"] is not None
 
-    ticket_row = db.execute(
-        text(
-            "SELECT ai_category, ai_priority_score, human_verified, human_override "
-            "FROM tickets WHERE id=:tid"
-        ),
-        {"tid": str(tid)},
-    ).mappings().first()
+    ticket_row = (
+        db.execute(
+            text(
+                "SELECT ai_category, ai_priority_score, human_verified, human_override "
+                "FROM tickets WHERE id=:tid"
+            ),
+            {"tid": str(tid)},
+        )
+        .mappings()
+        .first()
+    )
     assert ticket_row["ai_category"] == "billing"
     assert ticket_row["ai_priority_score"] == 4
     assert ticket_row["human_verified"] is True
@@ -216,10 +221,14 @@ def test_apply_with_override_flips_override_flag(client, db, admin_token):
     assert res.status_code == 200
     assert res.json()["applied_payload"]["category"] == "support"
 
-    ticket_row = db.execute(
-        text("SELECT ai_category, human_override FROM tickets WHERE id=:tid"),
-        {"tid": str(tid)},
-    ).mappings().first()
+    ticket_row = (
+        db.execute(
+            text("SELECT ai_category, human_override FROM tickets WHERE id=:tid"),
+            {"tid": str(tid)},
+        )
+        .mappings()
+        .first()
+    )
     assert ticket_row["ai_category"] == "support"
     assert ticket_row["human_override"] is True
 
@@ -313,9 +322,7 @@ def test_ticket_list_includes_latest_pending_suggestion(client, db, admin_token)
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert res.status_code == 200
-    row = next(
-        (t for t in res.json()["tickets"] if t["id"] == str(tid)), None
-    )
+    row = next((t for t in res.json()["tickets"] if t["id"] == str(tid)), None)
     assert row is not None
     assert row["suggestion"] is not None
     assert row["suggestion"]["id"] == str(sid)
@@ -335,8 +342,6 @@ def test_ticket_list_excludes_superseded(client, db, admin_token):
         "/admin/tickets",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
-    row = next(
-        (t for t in res.json()["tickets"] if t["id"] == str(tid)), None
-    )
+    row = next((t for t in res.json()["tickets"] if t["id"] == str(tid)), None)
     assert row is not None
     assert row["suggestion"] is None

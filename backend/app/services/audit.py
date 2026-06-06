@@ -4,6 +4,7 @@ Lifted from routers/meetings.py:_audit so suggestions.py and tickets.py
 (triage endpoint) can reuse it without copy-paste. Resource type is now
 explicit instead of hardcoded to 'meeting'.
 """
+
 from typing import Optional
 
 from sqlalchemy.orm import Session

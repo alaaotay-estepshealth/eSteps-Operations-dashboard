@@ -1,4 +1,5 @@
 """AI suggestion lifecycle endpoints: apply, reject, list-pending."""
+
 import json
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -50,25 +51,33 @@ def apply_suggestion(
     override = body.override_payload
     override_json = json.dumps(override) if override else None
 
-    row = db.execute(
-        text(
-            "UPDATE ai_suggestions SET status='applied', applied_at=now(), "
-            "applied_by=:user, "
-            "applied_payload=COALESCE(:override::jsonb, payload), "
-            "updated_at=now() "
-            "WHERE id=:id AND status='pending' "
-            "RETURNING id, entity_type, entity_id, payload, applied_payload, "
-            "model, confidence, status, rationale, applied_at, applied_by, "
-            "rejected_at, rejected_by, rejection_reason, ai_request_id, "
-            "created_at, updated_at"
-        ),
-        {"id": str(suggestion_id), "user": user.username, "override": override_json},
-    ).mappings().first()
+    row = (
+        db.execute(
+            text(
+                "UPDATE ai_suggestions SET status='applied', applied_at=now(), "
+                "applied_by=:user, "
+                "applied_payload=COALESCE(:override::jsonb, payload), "
+                "updated_at=now() "
+                "WHERE id=:id AND status='pending' "
+                "RETURNING id, entity_type, entity_id, payload, applied_payload, "
+                "model, confidence, status, rationale, applied_at, applied_by, "
+                "rejected_at, rejected_by, rejection_reason, ai_request_id, "
+                "created_at, updated_at"
+            ),
+            {
+                "id": str(suggestion_id),
+                "user": user.username,
+                "override": override_json,
+            },
+        )
+        .mappings()
+        .first()
+    )
 
     if not row:
-        existing = db.query(AISuggestion).filter(
-            AISuggestion.id == suggestion_id
-        ).first()
+        existing = (
+            db.query(AISuggestion).filter(AISuggestion.id == suggestion_id).first()
+        )
         if not existing:
             raise HTTPException(status_code=404, detail="Suggestion not found")
         raise HTTPException(
@@ -118,12 +127,7 @@ def list_pending(
     if entity_type:
         q = q.filter(AISuggestion.entity_type == entity_type)
     total = q.count()
-    rows = (
-        q.order_by(AISuggestion.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-        .all()
-    )
+    rows = q.order_by(AISuggestion.created_at.desc()).limit(limit).offset(offset).all()
     return PaginatedSuggestions(
         total=total,
         limit=limit,
@@ -141,27 +145,31 @@ def reject_suggestion(
     db: Session = Depends(get_db),
     user: User = Depends(require_operator),
 ) -> SuggestionDetail:
-    row = db.execute(
-        text(
-            "UPDATE ai_suggestions SET status='rejected', rejected_at=now(), "
-            "rejected_by=:user, rejection_reason=:reason, updated_at=now() "
-            "WHERE id=:id AND status='pending' "
-            "RETURNING id, entity_type, entity_id, payload, applied_payload, "
-            "model, confidence, status, rationale, applied_at, applied_by, "
-            "rejected_at, rejected_by, rejection_reason, ai_request_id, "
-            "created_at, updated_at"
-        ),
-        {
-            "id": str(suggestion_id),
-            "user": user.username,
-            "reason": body.reason,
-        },
-    ).mappings().first()
+    row = (
+        db.execute(
+            text(
+                "UPDATE ai_suggestions SET status='rejected', rejected_at=now(), "
+                "rejected_by=:user, rejection_reason=:reason, updated_at=now() "
+                "WHERE id=:id AND status='pending' "
+                "RETURNING id, entity_type, entity_id, payload, applied_payload, "
+                "model, confidence, status, rationale, applied_at, applied_by, "
+                "rejected_at, rejected_by, rejection_reason, ai_request_id, "
+                "created_at, updated_at"
+            ),
+            {
+                "id": str(suggestion_id),
+                "user": user.username,
+                "reason": body.reason,
+            },
+        )
+        .mappings()
+        .first()
+    )
 
     if not row:
-        existing = db.query(AISuggestion).filter(
-            AISuggestion.id == suggestion_id
-        ).first()
+        existing = (
+            db.query(AISuggestion).filter(AISuggestion.id == suggestion_id).first()
+        )
         if not existing:
             raise HTTPException(status_code=404, detail="Suggestion not found")
         raise HTTPException(
