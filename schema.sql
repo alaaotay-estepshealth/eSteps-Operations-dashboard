@@ -501,3 +501,33 @@ CREATE INDEX IF NOT EXISTS ix_tasks_booking_order ON meeting_tasks(booking_id, o
 CREATE INDEX IF NOT EXISTS ix_tasks_open_due
   ON meeting_tasks(due_at)
   WHERE done = FALSE AND due_at IS NOT NULL;
+
+-- ─── AI Suggestions (ES-OPS-09-AI-SUGGEST, 2026-06-06) ──────────────────────
+
+CREATE TABLE IF NOT EXISTS ai_suggestions (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  entity_type      TEXT NOT NULL,
+  entity_id        UUID NOT NULL,
+  payload          JSONB NOT NULL,
+  applied_payload  JSONB,
+  model            TEXT NOT NULL,
+  confidence       DOUBLE PRECISION,
+  status           TEXT NOT NULL DEFAULT 'pending'
+                   CHECK (status IN ('pending','applied','rejected','superseded')),
+  rationale        TEXT,
+  applied_at       TIMESTAMPTZ,
+  applied_by       TEXT,
+  rejected_at      TIMESTAMPTZ,
+  rejected_by      TEXT,
+  rejection_reason TEXT,
+  ai_request_id    UUID,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_suggestions_entity
+  ON ai_suggestions(entity_type, entity_id);
+
+CREATE INDEX IF NOT EXISTS ix_suggestions_pending
+  ON ai_suggestions(entity_type, created_at DESC)
+  WHERE status = 'pending';
