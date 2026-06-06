@@ -117,15 +117,21 @@ def record_decision_row(
     response_payload: dict,
     cost_estimate_usd: float = _COST_PER_CALL_USD,
     confidence: Optional[float] = None,
-) -> None:
-    """Best-effort write to ai_decisions. Silently no-ops if the table is missing."""
+) -> Optional[str]:
+    """Best-effort write to ai_decisions. Silently no-ops if the table is missing.
+
+    Returns the inserted row's id as a string, or None if the write was
+    skipped (table missing, transient DB error, etc.). Callers use the
+    returned id as a soft FK from ai_suggestions.ai_request_id.
+    """
     try:
-        db.execute(
+        row = db.execute(
             text(
                 "INSERT INTO ai_decisions "
                 "(request_type, request_payload, response_payload, cost_estimate_usd, "
                 " confidence, created_at) "
-                "VALUES (:rt, :rq::jsonb, :rs::jsonb, :cost, :conf, now())"
+                "VALUES (:rt, :rq::jsonb, :rs::jsonb, :cost, :conf, now()) "
+                "RETURNING id"
             ),
             {
                 "rt": request_type,
@@ -134,12 +140,13 @@ def record_decision_row(
                 "cost": cost_estimate_usd,
                 "conf": confidence,
             },
-        )
+        ).scalar()
         db.commit()
-        # Invalidate the spend cache after a write so the next read is accurate.
         _spend_cache["expires_at"] = 0.0
+        return str(row) if row is not None else None
     except Exception:
         db.rollback()
+        return None
 
 
 def _json(payload: dict) -> str:
