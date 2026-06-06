@@ -1,7 +1,7 @@
 # ES-OPS-09 — Platform Overview
 > One-stop technical map of the eSteps Operations Dashboard. For mission/status see [README](../README.md); for product strategy see [PRODUCT.md](PRODUCT.md); for design tokens see [DESIGN.md](DESIGN.md).
 
-**Last refreshed:** 2026-06-06 (after meeting-notes feature ship — commits 0b95ef5..1395c7e)
+**Last refreshed:** 2026-06-06 (added AI suggestion infrastructure)
 
 ## Table of contents
 1. [Architecture at a glance](#architecture-at-a-glance)
@@ -409,6 +409,42 @@ prompt ─▶ Gemini ─▶ response + token usage
 ### Budget enforcement
 
 `call_gemini` checks `gemini_today_spend_usd()` before every call. When over budget it raises `BudgetExhausted`, which routes lift to a 503 / `status="budget_exhausted"` row so callers degrade gracefully.
+
+### AI Suggestion infrastructure (ES-OPS-09-AI-SUGGEST, shipped 2026-06-06)
+
+A reusable review-loop primitive for "Gemini suggests an action, operator approves / edits-and-approves / rejects". Builds on `services/gemini.py` (no duplicated upstream code) and `ai_requests` (no duplicated call log).
+
+**Data model:**
+
+| Table | Purpose |
+|-------|---------|
+| `ai_suggestions` | Lifecycle row per suggestion. Status: `pending` → `applied` \| `rejected` \| `superseded`. `payload` JSONB = what Gemini suggested; `applied_payload` JSONB = what got written (may differ on operator override). Soft FK `ai_request_id` → `ai_requests.id`. |
+
+**Invariants:**
+
+- At most one `pending` suggestion per `(entity_type, entity_id)`. A new triage call supersedes the prior pending row, serialized by `SELECT FOR UPDATE` on the parent entity.
+- Never auto-applied — even at `confidence=0.99` the operator clicks Apply.
+- `applied_payload != payload` → entity's `human_override = true`.
+
+**v1 consumer: ticket triage.**
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/admin/tickets/{id}/ai-triage` | require_operator | Generate a suggestion. Supersedes any prior pending. Returns SuggestionDetail. |
+| POST | `/admin/suggestions/{id}/apply` | require_operator | Body: `{override_payload?}`. Writes to ticket cols, marks suggestion `applied`. |
+| POST | `/admin/suggestions/{id}/reject` | require_operator | Body: `{reason?}`. Marks `rejected`. |
+| GET | `/admin/suggestions/pending` | get_current_user | Cross-entity pending queue. |
+| GET | `/admin/tickets/{id}/suggestions` | get_current_user | Per-ticket history (all statuses). |
+
+**Frontend:** `SuggestionPill.vue` (4-state: no-suggestion / pending / applied / rejected) rendered inline in TicketsView row. Inline edit form lets operator override category / priority / assignee before applying.
+
+**Future consumers** (drop-in, same lifecycle):
+- `lead` — next-action suggestions (pause / set_priority / mark_cold / schedule_meeting)
+- `opportunity` — stage advance suggestion
+- `lead` (re-engagement angle) — different email angle per touch
+- `workflow_execution` — failure root-cause + suggested retry
+
+See [spec](superpowers/specs/2026-06-06-ai-suggestion-infra-ticket-triage-design.md) for prompt design, parsing rules, RBAC matrix, edge cases.
 
 ---
 
