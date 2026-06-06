@@ -28,6 +28,7 @@ from app.schemas.responses import (
     MeetingTaskUpdate,
     PreviousMeeting,
 )
+from app.services.audit import write_audit
 from app.services.gemini import (
     GEMINI_MODEL,
     call_gemini,
@@ -48,23 +49,25 @@ class SyncBody(BaseModel):
 
 
 def _audit(
-    db: Session, user: User, action: str, resource_id: str, payload: dict | None = None
+    db: Session,
+    user: User,
+    action: str,
+    resource_id: str,
+    payload: dict | None = None,
 ) -> None:
-    try:
-        from app.models.audit_log import AuditLog
+    """Thin wrapper preserving the meetings.py call signature.
 
-        row = AuditLog(
-            user_id=getattr(user, "id", None),
-            action=action,
-            resource="meeting",
-            resource_id=str(resource_id),
-            changes=payload or {},
-            status="success",
-        )
-        db.add(row)
-        db.commit()
-    except Exception:
-        db.rollback()
+    All meeting-domain audit rows use resource_type='meeting'. Future
+    callers should use write_audit directly with explicit resource_type.
+    """
+    write_audit(
+        db,
+        user,
+        action=action,
+        resource_type="meeting",
+        resource_id=resource_id,
+        payload=payload,
+    )
 
 
 @router.post("/sync", response_model=MeetingSyncResult)
