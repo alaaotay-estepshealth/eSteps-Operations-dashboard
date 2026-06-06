@@ -146,4 +146,18 @@ export const meetsAPI = {
   ...assetExplorerAPI('/admin/meets'),
 }
 
+export const meetingsAPI = {
+  list:    (params = {}) => api.get('/admin/meetings', { params }),
+  get:     (bookingId) => api.get(`/admin/meetings/${bookingId}`),
+  patchNotes: (bookingId, body) => api.patch(`/admin/meetings/${bookingId}/notes`, body),
+  createTask: (bookingId, body) => api.post(`/admin/meetings/${bookingId}/tasks`, body),
+  updateTask: (bookingId, taskId, body) =>
+    api.patch(`/admin/meetings/${bookingId}/tasks/${taskId}`, body),
+  deleteTask: (bookingId, taskId) =>
+    api.delete(`/admin/meetings/${bookingId}/tasks/${taskId}`),
+  aiDraft: (bookingId, force = false) =>
+    api.post(`/admin/meetings/${bookingId}/ai-draft`, { force }),
+  sync: (body = { source: 'manual' }) => api.post('/admin/meetings/sync', body),
+}
+
 export default api
