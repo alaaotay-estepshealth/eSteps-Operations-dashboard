@@ -259,3 +259,46 @@ def test_reject_marks_rejected_with_reason(client, db, admin_token):
     assert body["status"] == "rejected"
     assert body["rejection_reason"] == "low confidence and stale ticket"
     assert body["rejected_at"] is not None
+
+
+def test_pending_lists_only_pending_across_tickets(client, db, admin_token):
+    t1 = _seed_ticket(db)
+    t2 = _seed_ticket(db)
+    _seed_pending_suggestion(db, t1)
+    s2 = _seed_pending_suggestion(db, t2)
+    db.execute(
+        text("UPDATE ai_suggestions SET status='rejected' WHERE id=:id"),
+        {"id": str(s2)},
+    )
+    db.commit()
+
+    res = client.get(
+        "/admin/suggestions/pending",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["total"] >= 1
+    statuses = {s["status"] for s in body["suggestions"]}
+    assert statuses == {"pending"}
+
+
+def test_ticket_suggestion_history_returns_all_statuses(client, db, admin_token):
+    tid = _seed_ticket(db)
+    s1 = _seed_pending_suggestion(db, tid)
+    s2 = _seed_pending_suggestion(db, tid)
+    db.execute(
+        text("UPDATE ai_suggestions SET status='superseded' WHERE id=:id"),
+        {"id": str(s1)},
+    )
+    db.commit()
+
+    res = client.get(
+        f"/admin/tickets/{tid}/suggestions",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["total"] == 2
+    statuses = {s["status"] for s in body["suggestions"]}
+    assert statuses == {"pending", "superseded"}

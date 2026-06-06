@@ -106,6 +106,34 @@ def apply_suggestion(
     return SuggestionDetail.model_validate(dict(row))
 
 
+@router.get("/pending", response_model=PaginatedSuggestions)
+def list_pending(
+    entity_type: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> PaginatedSuggestions:
+    q = db.query(AISuggestion).filter(AISuggestion.status == "pending")
+    if entity_type:
+        q = q.filter(AISuggestion.entity_type == entity_type)
+    total = q.count()
+    rows = (
+        q.order_by(AISuggestion.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
+    return PaginatedSuggestions(
+        total=total,
+        limit=limit,
+        offset=offset,
+        suggestions=[
+            SuggestionDetail.model_validate(r, from_attributes=True) for r in rows
+        ],
+    )
+
+
 @router.post("/{suggestion_id}/reject", response_model=SuggestionDetail)
 def reject_suggestion(
     suggestion_id: UUID,

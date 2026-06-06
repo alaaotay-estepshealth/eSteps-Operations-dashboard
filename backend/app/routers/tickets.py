@@ -14,6 +14,7 @@ from app.models.audit_log import AuditLog
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.schemas.responses import (
+    PaginatedSuggestions,
     PaginatedTickets,
     SuggestionDetail,
     TicketCategoryBreakdown,
@@ -311,3 +312,32 @@ def triage_ticket(
     )
 
     return SuggestionDetail.model_validate(suggestion, from_attributes=True)
+
+
+@router.get("/{ticket_id}/suggestions", response_model=PaginatedSuggestions)
+def list_ticket_suggestions(
+    ticket_id: UUID,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> PaginatedSuggestions:
+    q = db.query(AISuggestion).filter(
+        AISuggestion.entity_type == "ticket",
+        AISuggestion.entity_id == ticket_id,
+    )
+    total = q.count()
+    rows = (
+        q.order_by(AISuggestion.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
+    return PaginatedSuggestions(
+        total=total,
+        limit=limit,
+        offset=offset,
+        suggestions=[
+            SuggestionDetail.model_validate(r, from_attributes=True) for r in rows
+        ],
+    )
