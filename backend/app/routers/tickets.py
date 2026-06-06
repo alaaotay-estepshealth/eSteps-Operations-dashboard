@@ -1,20 +1,33 @@
-from typing import Optional
+import json
+from typing import Optional, Set
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_admin
+from app.auth import get_current_user, require_admin, require_operator
+from app.config import settings
 from app.database import get_db
+from app.models.ai_suggestion import AISuggestion
 from app.models.audit_log import AuditLog
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.schemas.responses import (
     PaginatedTickets,
+    SuggestionDetail,
     TicketCategoryBreakdown,
     TicketRow,
     TicketStats,
     TicketStatusUpdate,
+)
+from app.services.audit import write_audit
+from app.services.gemini import (
+    GEMINI_MODEL,
+    call_gemini,
+    cost_per_call_usd,
+    gemini_today_spend_usd,
+    record_decision_row,
 )
 
 router = APIRouter(prefix="/admin/tickets", tags=["tickets"])
@@ -131,3 +144,165 @@ def update_ticket_status(
     db.commit()
 
     return {"status": "updated", "ticket_id": ticket_id}
+
+
+# ─── AI Triage (ES-OPS-09 Task 6) ───────────────────────────────────────────
+
+_VALID_CATEGORIES = {"billing", "technical", "partnership", "support"}
+
+_TRIAGE_INSTRUCTION = (
+    "You are a triage AI for the eSteps Health operations team. "
+    "Classify this incoming support ticket.\n\n"
+    "TICKET\n"
+    "  Source:  {source}\n"
+    "  Subject: {subject}\n"
+    "  Body:    {body}\n\n"
+    "Available operator usernames (for assigned_to): {operators_csv}\n\n"
+    "Return ONLY a JSON object with these exact fields, no markdown fence, "
+    "no prose around it:\n"
+    "{{\n"
+    '  "category":       "billing" | "technical" | "partnership" | "support",\n'
+    '  "priority_score": <integer 1-5, where 5 = urgent>,\n'
+    '  "assigned_to":    "<one of the operator usernames above>" | null,\n'
+    '  "rationale":      "<1-2 sentences explaining your reasoning>",\n'
+    '  "confidence":     <float 0.0-1.0, how unambiguous the signals are>\n'
+    "}}\n\n"
+    "Rules:\n"
+    "- legal/refund/chargeback/data-deletion/GDPR -> category=billing, priority>=4\n"
+    "- error/bug/crash/500/integration/API failure -> category=technical\n"
+    "- partnership/research/collaboration/grant/IRB -> category=partnership\n"
+    "- otherwise -> category=support\n"
+    "- urgent/down/blocking/payment-failed -> priority_score=5\n"
+    "- ambiguous body -> confidence<0.7, assigned_to=null"
+)
+
+
+def _available_operators(db: Session) -> Set[str]:
+    rows = db.execute(
+        text(
+            "SELECT username FROM users "
+            "WHERE role IN ('admin','operator') AND is_active = true"
+        )
+    ).all()
+    return {r[0] for r in rows}
+
+
+def _build_triage_prompt(ticket, operators: Set[str]) -> str:
+    return _TRIAGE_INSTRUCTION.format(
+        source=ticket.source or "—",
+        subject=(ticket.subject or "")[:200],
+        body=(ticket.body_preview or "")[:1000],
+        operators_csv=", ".join(sorted(operators)) or "(none configured)",
+    )
+
+
+def _parse_and_validate_triage(raw: str, operators: Set[str]) -> dict:
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("```")[1].lstrip("json").strip()
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=502, detail=f"Gemini returned malformed JSON: {e}"
+        )
+
+    if data.get("category") not in _VALID_CATEGORIES:
+        raise HTTPException(
+            status_code=502, detail=f"Invalid category: {data.get('category')!r}"
+        )
+    pri = data.get("priority_score")
+    if not isinstance(pri, int) or not 1 <= pri <= 5:
+        raise HTTPException(
+            status_code=502, detail=f"Invalid priority_score: {pri!r}"
+        )
+    rationale = (data.get("rationale") or "").strip()
+    if not rationale:
+        raise HTTPException(status_code=502, detail="Missing rationale")
+
+    assignee = data.get("assigned_to")
+    if assignee and assignee not in operators:
+        assignee = None
+
+    conf = data.get("confidence")
+    if not isinstance(conf, (int, float)) or not 0.0 <= float(conf) <= 1.0:
+        conf = None
+
+    return {
+        "category": data["category"],
+        "priority_score": pri,
+        "assigned_to": assignee,
+        "rationale": rationale,
+        "confidence": float(conf) if conf is not None else None,
+    }
+
+
+@router.post("/{ticket_id}/ai-triage", response_model=SuggestionDetail)
+def triage_ticket(
+    ticket_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_operator),
+) -> SuggestionDetail:
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    if ticket.status == "resolved":
+        raise HTTPException(status_code=409, detail="Cannot triage resolved ticket")
+
+    if gemini_today_spend_usd(db) >= settings.ai_daily_budget_usd:
+        raise HTTPException(
+            status_code=503,
+            detail="Daily Gemini budget exhausted, retry after midnight UTC",
+        )
+
+    # Supersede any existing pending suggestion in the same transaction.
+    db.execute(
+        text(
+            "UPDATE ai_suggestions SET status='superseded', updated_at=now() "
+            "WHERE entity_type='ticket' AND entity_id=:tid AND status='pending'"
+        ),
+        {"tid": str(ticket_id)},
+    )
+
+    operators = _available_operators(db)
+    prompt = _build_triage_prompt(ticket, operators)
+
+    raw = call_gemini(prompt)
+    parsed = _parse_and_validate_triage(raw, operators)
+
+    ai_req_id = record_decision_row(
+        db,
+        request_type="ticket_triage",
+        request_payload={"ticket_id": str(ticket_id)},
+        response_payload=parsed,
+        cost_estimate_usd=cost_per_call_usd(),
+        confidence=parsed.get("confidence"),
+    )
+
+    suggestion = AISuggestion(
+        entity_type="ticket",
+        entity_id=ticket_id,
+        payload=parsed,
+        model=GEMINI_MODEL,
+        confidence=parsed.get("confidence"),
+        rationale=parsed.get("rationale"),
+        ai_request_id=ai_req_id,
+        status="pending",
+    )
+    db.add(suggestion)
+    db.commit()
+    db.refresh(suggestion)
+
+    write_audit(
+        db,
+        user,
+        action="ai.triage.request",
+        resource_type="ticket",
+        resource_id=str(ticket_id),
+        payload={
+            "suggestion_id": str(suggestion.id),
+            "confidence": parsed.get("confidence"),
+        },
+    )
+
+    return SuggestionDetail.model_validate(suggestion, from_attributes=True)
