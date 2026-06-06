@@ -25,6 +25,7 @@ const routes = [
   { path: '/opportunities', component: () => import('../views/OpportunitiesDeals.vue'),  meta: { roles: OPS } },
   { path: '/bookings',      component: () => import('../views/BookingsView.vue'),        meta: { roles: ALL } },
   { path: '/calendar',      component: () => import('../views/CalendarView.vue'),        meta: { roles: ALL } },
+  { path: '/meeting/:bookingId', component: () => import('../views/MeetingView.vue'),    meta: { roles: ALL } },
   { path: '/tickets',       component: () => import('../views/TicketsView.vue'),         meta: { roles: OPS } },
   { path: '/gtm',           component: () => import('../views/GTMStrategy.vue'),         meta: { roles: ADM } },
   { path: '/meets',         component: () => import('../views/MeetsView.vue'),           meta: { roles: ALL } },
