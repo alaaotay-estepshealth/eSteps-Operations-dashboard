@@ -20,7 +20,7 @@ Convert 972 academic researchers into 30–50 research partnerships through auto
 [AI Influencer]    ─┘                              │
                                            FastAPI Backend
                                                    │
-                                           Vue 3 Dashboard (15 views)
+                                           Vue 3 Dashboard (25 views)
                                     /systems  /overview  /pipeline  /emails
                                     /bookings  /opportunities  /workflows
                                     /n8n  /ai  /review  /tickets  /gtm  /system
@@ -47,7 +47,7 @@ Convert 972 academic researchers into 30–50 research partnerships through auto
 
 ---
 
-## Dashboard Views (21 routes)
+## Dashboard Views (25 routes)
 
 ### Operations
 | Route | View | Purpose |
@@ -67,6 +67,8 @@ Convert 972 academic researchers into 30–50 research partnerships through auto
 | `/bookings` | BookingsView | Upcoming/past meetings, no-show rate, status filter |
 | `/opportunities` | OpportunitiesDeals | Deal pipeline funnel, tier breakdown, paginated deals |
 | `/followups` | FollowupsView | Overdue / due-today / this-week / upcoming-meetings / hot-needing-action + Reschedule/Drop actions |
+| `/calendar` | CalendarView | Meeting calendar — month/week view across all bookings |
+| `/meeting/:bookingId` | MeetingView | Per-meeting deep-link — prep notes, tasks, AI auto-draft, recap |
 
 ### Automation
 | Route | View | Purpose |
@@ -82,13 +84,16 @@ Convert 972 academic researchers into 30–50 research partnerships through auto
 |---|---|---|
 | `/tickets` | TicketsView | Ticket queue with inline admin status update, category breakdown |
 | `/gtm` | GTMStrategy | Browse 13+ strategy markdown files by directory with inline viewer |
+| `/meets` | MeetsView | Meet prep asset explorer (per-meeting briefing docs) |
+| `/report` | ReportView | Print-friendly executive report (Campaign Progress, KPIs, AI Ops, Workflow Health) |
+| `/users` | UsersView | User management (admin-only) |
 | `/system` | SystemLogs | Audit trail, filterable by level + source |
 
 ---
 
 ## Project Status & Pending Work
 
-_Last updated: 2026-05-26_
+_Last updated: 2026-06-06 (after meeting-notes feature ship)_
 
 ### ✅ Done
 
@@ -109,6 +114,7 @@ _Last updated: 2026-05-26_
 - **OpenClaw agent integration** (`/agent`) — launch agent actions via OpenClaw's documented `/hooks/agent` + `/hooks/wake` webhook API; **admin-only · audit-logged · explicit-confirm**; graceful 503 until configured
 - **Charts** — reusable inline-SVG `BarChart` / `LineChart` / `DonutChart` / `HeatMap`; clickable drill-downs from KPI cards, chart bars, and table rows
 - **Craft pass (impeccable)** — new views aligned to the Control Room Minimalism system: shared `StatRow` for display strips, established `hover:bg-ctrl-raised hover:shadow-float active:scale-[0.99]` card states, global focus-visible ring, status-only color
+- **Meeting prep notes + tasks + AI auto-draft** (ES-OPS-09-MEET-NOTES) — shipped 2026-06-06 across commits `0b95ef5..1395c7e`. New `/meeting/:bookingId` deep-link route + Followups/Briefing/Contacts wiring + 8 endpoints on `/admin/meetings/*` + Gemini-powered auto-draft of prep notes on first open. See [docs/PLATFORM_OVERVIEW.md](docs/PLATFORM_OVERVIEW.md#meeting-prep) and the [spec](docs/superpowers/specs/2026-06-05-meeting-notes-and-tickets-design.md) for full detail.
 
 ### ⏳ Pending — needs YOU (console / deploy / n8n)
 
@@ -126,7 +132,6 @@ These are the remaining actions to fully complete every phase. None block the da
 
 ### ⏳ Pending — code (ready to build)
 
-- **Meeting notes & checklist (per upcoming meeting)** — design approved 2026-06-05. Materialize the `bookings` table; add `meeting_notes` (markdown prep + recap) and `meeting_tasks` (checklist with due dates) tables; Gemini auto-draft on first open; overdue checklist items bubble into `/followups` and the Briefing badge; deep-linkable `/meeting/:id` plus a drawer launched from Followups rows. Spec: [docs/superpowers/specs/2026-06-05-meeting-notes-and-tickets-design.md](docs/superpowers/specs/2026-06-05-meeting-notes-and-tickets-design.md). LOE ~26 h.
 - **Router tests** — harness is now safe; the newer routers (emails / bookings / opportunities / tickets / gtm / systems / n8n_proxy / webhooks / insights / followups / contacts / lead_actions) still need tests. Requires `TEST_DATABASE_URL` (throwaway Postgres) to run — never the prod Supabase URL.
 - **Reply-from-dash** — Human Review approve → send the drafted reply via n8n (needs an n8n send-webhook URL).
 
@@ -161,6 +166,8 @@ Tables untouched: `leads`, `email_logs`, `bookings`, `opportunities`, `tickets`,
 ---
 
 ## API Endpoints
+
+> **68+ endpoints across 18 routers.** Selected list below — full enumeration in [docs/PLATFORM_OVERVIEW.md](docs/PLATFORM_OVERVIEW.md) and the live Swagger UI at `/docs`.
 
 ### Auth
 ```
@@ -287,7 +294,7 @@ dashboard-system/
 │       ├── auth.py                 ← JWT + require_admin + require_operator
 │       ├── sync_n8n.py             ← n8n REST API execution sync
 │       ├── seed.py                 ← Seeds 5 systems + demo data
-│       ├── models/                 ← 11 ORM models (system, lead, ticket, etc.)
+│       ├── models/                 ← 13+ ORM models (system, lead, ticket, meeting_note, meeting_task, etc.)
 │       ├── routers/                ← 18 route modules
 │       │   ├── admin.py            ← Dashboard + pipeline + AI + logs + alerts + sync
 │       │   ├── auth.py             ← POST /auth/token
@@ -296,6 +303,7 @@ dashboard-system/
 │       │   ├── n8n_proxy.py        ← /proxy/n8n/* (execute + toggle)
 │       │   ├── email_logs.py       ← /admin/emails/*
 │       │   ├── bookings.py         ← /admin/bookings/*
+│       │   ├── meetings.py         ← /admin/meetings/* (prep notes, tasks, AI auto-draft) — NEW
 │       │   ├── opportunities.py    ← /admin/opportunities/*
 │       │   ├── tickets.py          ← /admin/tickets/*
 │       │   ├── gtm.py              ← /admin/gtm/*
@@ -306,7 +314,8 @@ dashboard-system/
 │       │   ├── briefing.py         ← /admin/briefing (overnight deltas + priorities)
 │       │   └── openclaw.py         ← /admin/openclaw/* (agent action launcher)
 │       ├── services/
-│       │   └── system_service.py   ← Cross-system aggregations + per-system activity
+│       │   ├── system_service.py   ← Cross-system aggregations + per-system activity
+│       │   └── gemini.py           ← Gemini API client (memo, assistant, meeting auto-draft)
 │       ├── tests/                  ← pytest (conftest guard refuses prod DB)
 │       └── schemas/
 │           └── responses.py        ← Pydantic response models
@@ -316,11 +325,13 @@ dashboard-system/
     ├── package.json
     └── src/
         ├── api/index.js            ← API namespaces (admin, systems, n8n, emails, …)
-        ├── composables/useStaleFetch.js ← 60s stale-while-revalidate
+        ├── composables/
+        │   ├── useStaleFetch.js    ← 60s stale-while-revalidate
+        │   └── useDailyMemo.js     ← Memoizes AI memo fetch per UTC day
         ├── stores/
         │   ├── auth.js             ← JWT token + role (Pinia)
         │   └── system.js           ← Multi-system filter (Pinia)
-        ├── views/                   ← 21 views + Login
+        ├── views/                   ← 25 views + Login
         │   ├── BriefingView.vue    ← /briefing — landing: overnight, priorities, recommended-today, memo
         │   ├── Insights.vue        ← /insights — decision hub: KPIs vs targets, charts, heatmap, memo, assistant
         │   ├── ContactsView.vue    ← /contacts — people + Hot filter + timeline drawer
@@ -330,6 +341,7 @@ dashboard-system/
         │   ├── Pipeline.vue        ← /pipeline — funnel + filters + row actions
         │   ├── EmailAnalytics.vue  ← /emails — delivery + A/B
         │   ├── BookingsView.vue    ← /bookings — meetings
+        │   ├── MeetingView.vue     ← /meeting/:bookingId — deep-link prep notes + tasks + AI draft — NEW
         │   ├── OpportunitiesDeals.vue ← /opportunities — deal pipeline
         │   ├── Workflows.vue       ← /workflows — execution health + sparklines
         │   ├── N8nWorkflows.vue    ← /n8n — trigger + toggle
@@ -346,7 +358,10 @@ dashboard-system/
         │   ├── TopBar.vue          ← Title + last-synced + refresh
         │   ├── AlertBanner.vue     ← Dashboard-wide active-alert banner (polls 60s)
         │   ├── AssistantPanel.vue  ← AI Ops Assistant chat (used on Insights)
-        │   └── ui/                 ← StatRow, Badge, Table, SectionContainer, EmptyState, Sparkline, BarChart, LineChart, DonutChart, HeatMap
+        │   ├── MeetingDrawer.vue   ← Slide-over drawer launched from Followups/Briefing rows — NEW
+        │   ├── MeetingNoteEditor.vue ← Markdown editor for meeting prep + recap notes — NEW
+        │   ├── MeetingTaskRow.vue  ← Checklist row with due-date + status toggle — NEW
+        │   └── ui/                 ← StatRow, Badge, Table, SectionContainer, EmptyState, Sparkline, BarChart, LineChart, DonutChart, HeatMap, Markdown, ConfirmDialog, PromptDialog
         └── style.css               ← OKLCH design tokens + Tailwind
 ```
 
@@ -459,6 +474,8 @@ Control Room Minimalism — dark slate, OKLCH color tokens, Syne/DM Sans/JetBrai
 ## Documentation
 
 All docs live in [`docs/`](./docs/):
+
+- **[docs/PLATFORM_OVERVIEW.md](docs/PLATFORM_OVERVIEW.md)** — Single-source-of-truth technical map: every view, endpoint, model, AI flow, GTM/Meet asset explorer, OpenClaw, n8n workflows, webhooks, design tokens. Start here.
 
 | Doc | What |
 |---|---|

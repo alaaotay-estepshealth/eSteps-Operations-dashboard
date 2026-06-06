@@ -4,6 +4,7 @@
 **Version:** 2.0.0
 **Author:** Alaa Otay
 **Date:** May 2026
+**Last refreshed:** 2026-06-06 (post meeting-notes ship + Dashboard Overhaul WIP merge)
 
 ---
 
@@ -92,8 +93,8 @@ The eSteps Operations Dashboard is a **multi-system monitoring platform** that p
 │   FastAPI Backend     │◄──────────────┘
 │   (Python 3.11+)      │
 │                       │         ┌──────────────────────┐
-│  10 routers           │◄────────│  Ops PostgreSQL DB   │
-│  35+ endpoints        │         │  (Supabase esteps-   │
+│  18 routers           │◄────────│  Ops PostgreSQL DB   │
+│  68+ endpoints        │         │  (Supabase esteps-   │
 │  JWT authentication   │         │   ops, eu-west-1)    │
 │  RBAC (admin/operator │         └──────────────────────┘
 │        /readonly)     │
@@ -109,10 +110,10 @@ The eSteps Operations Dashboard is a **multi-system monitoring platform** that p
 │   Vue 3 Frontend      │
 │   (Vite + Tailwind)   │
 │                       │
-│  16 routes            │
-│  13 views             │
-│  7 components         │
-│  28 API methods       │
+│  25+ routes           │
+│  25 views             │
+│  20+ components       │
+│  60+ API methods      │
 │                       │
 │  Dark-mode dashboard  │
 │  OKLCH colour system  │
@@ -393,6 +394,27 @@ Because the leads source database has limited rows in `email_logs` (6), `opportu
 | **Bookings** | `leads.meeting_booked_at` + `opportunities.call_held_at` + `conversations` with ILIKE keywords | UNION ALL three sources, tag source as 'calendly', 'n8n-workflow', 'gmail-reply' |
 | **Opportunities** | `opportunities` + `leads` at advanced stages + `conversations` with positive intent | Combine real deals with derived "qualified_lead" (score ≥ 7) and "warm_reply" stages. Assign estimated values: Priority_A = $15k, Priority_B = $10k |
 
+### 4.4 ORM Model Inventory (14 models)
+
+Located in `app/models/` (each model file maps 1:1 to a table):
+
+| Model file | Table | Notes |
+|------------|-------|-------|
+| `system.py` | `systems` | System registry (anchor) |
+| `workflow_execution.py` | `workflow_executions` | Per-execution row, FK → systems |
+| `ai_request.py` | `ai_requests` | AI decision audit |
+| `audit_log.py` | `audit_logs` | Ops audit trail |
+| `user.py` | `users` | Dashboard users (RBAC) |
+| `ticket.py` | `tickets` | Support tickets |
+| `lead.py` | `leads` | ORM mirror of source DB; gained `title`, `bio`, `meeting_scheduled_for` columns for meetings flow |
+| `email_log.py` | `email_logs` | Tracked emails |
+| `booking.py` | `bookings` | Gained 4 new columns: `title`, `meeting_url`, `duration_min`, `rescheduled_from` |
+| `opportunity.py` | `opportunities` | Deal pipeline |
+| `meeting_note.py` (NEW 2026-06-06) | `meeting_notes` | 1:1 with bookings, PK = booking_id, holds `prep_md` + `recap_md` + AI provenance |
+| `meeting_task.py` (NEW 2026-06-06) | `meeting_tasks` | 1:N per booking. Partial index `ix_tasks_open_due ON meeting_tasks(due_at) WHERE done=FALSE AND due_at IS NOT NULL` |
+| `strategy_asset.py` (recent) | `strategy_assets` | BLOB-backed GTM asset explorer storage |
+| `meet_asset.py` (recent) | `meet_assets` | BLOB-backed meeting-prep asset explorer storage |
+
 ---
 
 ## 5. Backend — FastAPI Application
@@ -408,15 +430,16 @@ backend/
 │       ├── 0001_initial_schema.py
 │       └── 0002_multi_system.py  ← systems table + system_id FKs
 └── app/
-    ├── main.py                   ← FastAPI init, CORS, 10 routers
-    ├── config.py                 ← Settings (13 env vars)
+    ├── main.py                   ← FastAPI init, CORS, 18 routers
+    ├── config.py                 ← Settings (17+ env vars)
     ├── database.py               ← Dual SQLAlchemy sessions (ops + leads)
     ├── auth.py                   ← JWT auth + RBAC dependencies
     ├── dependencies.py           ← get_system() DI dependency
     ├── seed.py                   ← Seeds 5 systems + demo data
     ├── sync_n8n.py               ← n8n REST API execution sync
-    ├── models/                   ← 11 SQLAlchemy ORM models
-    ├── routers/                  ← 10 route modules
+    ├── models/                   ← 14 SQLAlchemy ORM models
+    ├── routers/                  ← 18 route modules
+    ├── services/                 ← Shared service layer (gemini, system_service)
     └── schemas/
         └── responses.py          ← 30+ Pydantic response models
 ```
@@ -439,7 +462,12 @@ All configuration is loaded from environment variables via `pydantic-settings`:
 | `ENVIRONMENT` | `development` | dev = auto-create tables; prod = enforce HMAC |
 | `AUTO_CREATE_DB` | `true` | Auto-create tables on startup (dev only) |
 | `CORS_ORIGINS` | `http://localhost:5173,...` | Comma-separated allowed origins |
-| `STRATEGY_DIR` | `""` | Semicolon-separated paths for GTM strategy files |
+| `STRATEGY_DIR` | `""` | Semicolon-separated paths for GTM strategy files (seeded into `strategy_assets` BLOB store) |
+| `MEET_DIR` | `""` | Semicolon-separated paths for meeting prep files (seeded into `meet_assets` BLOB store) |
+| `GEMINI_API_KEY` | — | Required for Gemini 2.5 Flash calls (prep notes, memos, ask-assistant) |
+| `OPENCLAW_BASE_URL` | — | OpenClaw agent integration base URL |
+| `OPENCLAW_HOOK_TOKEN` | — | OpenClaw webhook auth token |
+| `LEADS_DATABASE_URL` | `""` | Fallback to `DATABASE_URL` (ops DB) when unset — same key listed earlier for emphasis |
 
 ### 5.3 Application Initialisation (`main.py`)
 
@@ -450,7 +478,7 @@ app = FastAPI(title="eSteps Ops Dashboard API", version="2.0.0")
 # CORS middleware allows frontend access
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins_list, ...)
 
-# 10 routers registered (order does not matter)
+# 18 routers registered (order does not matter)
 app.include_router(auth.router)          # /auth/*
 app.include_router(admin.router)         # /admin/*  (dashboard + pipeline + AI + logs + sync)
 app.include_router(webhooks.router)      # /webhooks/*
@@ -461,6 +489,15 @@ app.include_router(bookings.router)      # /admin/bookings/*
 app.include_router(opportunities.router) # /admin/opportunities/*
 app.include_router(tickets.router)       # /admin/tickets/*
 app.include_router(gtm.router)           # /admin/gtm/*
+app.include_router(meets.router)         # /admin/meets/*       (NEW — meet asset explorer)
+app.include_router(meetings.router)      # /admin/meetings/*    (NEW 2026-06-06 — prep + tasks)
+app.include_router(briefing.router)      # /admin/briefing
+app.include_router(insights.router)      # /admin/insights, /admin/memo, /admin/ask-assistant
+app.include_router(followups.router)     # /admin/followups
+app.include_router(contacts.router)      # /admin/contacts/*
+app.include_router(lead_actions.router)  # /admin/leads/{id}/action
+app.include_router(users.router)         # /admin/users/*
+app.include_router(openclaw.router)      # /admin/openclaw/*
 
 # Health check
 @app.get("/health")
@@ -540,12 +577,106 @@ In development mode, `Base.metadata.create_all(bind=engine)` auto-creates all ta
 | `GET` | `/admin/tickets` | User | Paginated ticket list. Filters: `status`, `category` |
 | `PATCH` | `/admin/tickets/{id}/status` | Admin | Update ticket status inline |
 
-#### GTM Strategy (`routers/gtm.py`) — 2 endpoints
+#### GTM Strategy (`routers/gtm.py`) — Asset explorer (admin-only)
+
+Backed by `strategy_assets` BLOB table, seeded from `STRATEGY_DIR` on `/sync`. Implements the shared asset-explorer pattern (see §5.7).
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| `GET` | `/admin/gtm/strategies` | User | List strategy markdown files with metadata (name, directory, size, modified date) |
-| `GET` | `/admin/gtm/strategy/{path}` | User | Read raw markdown content. Path-traversal protected. |
+| `GET` | `/admin/gtm/tree` | Admin | File tree (directories + files) |
+| `GET` | `/admin/gtm/strategy/{path}` | Admin | Read markdown/text body (legacy alias also supported for `/strategies` listing) |
+| `GET` | `/admin/gtm/download/{path}` | Admin | Binary download |
+| `POST` | `/admin/gtm/upload` | Admin | Multipart upload (≤ 25 MB) |
+| `POST` | `/admin/gtm/folder` | Admin | Create folder |
+| `DELETE` | `/admin/gtm/{path}` | Admin | Delete file or folder |
+| `POST` | `/admin/gtm/sync` | Admin | Re-walk disk seed paths |
+
+#### Meets Assets (`routers/meets.py`) — Asset explorer (admin-only)
+
+Same shape as `/admin/gtm/*` but backed by `meet_assets` BLOB table, seeded from `MEET_DIR`. Used by `MeetsView.vue`. Endpoints: `/admin/meets/tree`, `/admin/meets/file/{path}`, `/admin/meets/download/{path}`, `/admin/meets/upload`, `/admin/meets/folder`, `/admin/meets/{path}` (DELETE), `/admin/meets/sync`.
+
+#### Briefing (`routers/briefing.py`) — 1 endpoint
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `GET` | `/admin/briefing` | User | Overnight digest + today's priorities. Includes `meetings_today`, `meeting_open_tasks`, recent inbound replies, queue counts. |
+
+#### Insights (`routers/insights.py`) — 3 endpoints
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `GET` | `/admin/insights` | User | KPI rollup vs targets (week/month windows), pipeline health, AI cost burn |
+| `GET` | `/admin/memo` | User | Gemini-generated weekly executive memo (budget-guarded via `services/gemini.py`) |
+| `POST` | `/admin/ask-assistant` | User | Free-form question → Gemini with insights/briefing context grounded |
+
+#### Follow-ups (`routers/followups.py`) — 1 endpoint
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `GET` | `/admin/followups` | User | Sectioned follow-up queue: overdue replies, stalled deals, ageing tickets, and `open_meeting_tasks` (sourced from `meeting_tasks` where `done=FALSE` and `due_at <= now()`) |
+
+#### Contacts (`routers/contacts.py`) — 3 endpoints
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `GET` | `/admin/contacts` | User | Paginated contact directory (joined leads + recent engagement) |
+| `GET` | `/admin/contacts/priority` | User | High-priority contacts (score-weighted) |
+| `GET` | `/admin/contacts/{lead_id}` | User | Single contact detail with email/conversation history |
+
+#### Lead Actions (`routers/lead_actions.py`) — 1 endpoint
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/admin/leads/{lead_id}/action` | Operator+ | Stage transitions, manual touch, snooze, mark cold. Writes audit log. |
+
+#### Users (`routers/users.py`) — CRUD (admin-only)
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `GET` | `/admin/users` | Admin | List dashboard users |
+| `POST` | `/admin/users` | Admin | Create user (hashed password via passlib) |
+| `PATCH` | `/admin/users/{id}` | Admin | Update role / active flag / password |
+| `DELETE` | `/admin/users/{id}` | Admin | Delete user |
+
+#### OpenClaw (`routers/openclaw.py`) — 3 endpoints
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `GET` | `/admin/openclaw/status` | Operator+ | Current OpenClaw agent state + last wake event |
+| `POST` | `/admin/openclaw/agent` | Admin | Start/stop the OpenClaw agent (proxied via `OPENCLAW_BASE_URL`) |
+| `POST` | `/admin/openclaw/wake-event` | Admin | Manually inject a wake event |
+
+#### Meetings (`routers/meetings.py`) — Meeting prep + checklist (NEW 2026-06-06)
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/admin/meetings/sync` | require_admin | Materialize bookings rows from `leads.meeting_scheduled_for`. Idempotent; ±5-minute reschedule window updates in place and stashes `rescheduled_from`. Outside the window creates a new row so each distinct meeting gets its own notes. |
+| `GET` | `/admin/meetings` | get_current_user | Paginated list. Filters: `status`, `has_open_tasks`, `limit`. Each row includes `open_task_count` and `has_notes` flags via single aggregate. |
+| `GET` | `/admin/meetings/{booking_id}` | get_current_user | Full MeetingDetail: booking + lead summary + notes (auto-drafted on first open, see below) + ordered tasks + up to 5 previous meetings for same lead. |
+| `PATCH` | `/admin/meetings/{booking_id}/notes` | require_operator | Upsert MeetingNote (prep_md, recap_md). Creates row on first write. Stamps `updated_by`. |
+| `POST` | `/admin/meetings/{booking_id}/tasks` | require_operator | Create MeetingTask. Auto-increments `order_index`. |
+| `PATCH` | `/admin/meetings/{booking_id}/tasks/{task_id}` | require_operator | Partial update. `done` flip → stamps/clears `done_at`. Cross-booking task_id → 404. |
+| `DELETE` | `/admin/meetings/{booking_id}/tasks/{task_id}` | require_operator | Hard delete. |
+| `POST` | `/admin/meetings/{booking_id}/ai-draft` | require_operator (force=true → admin) | Manual prep-note regeneration via Gemini. `force=true` bypasses the budget guard. |
+
+**Auto-draft flow:** First GET on a booking with no notes row triggers `_try_autodraft()` which:
+1. Skips if `gemini_today_spend_usd >= ai_daily_budget_usd` → returns `ai_skipped="budget_exhausted"`.
+2. Otherwise calls Gemini 2.5 Flash with a structured prep prompt (lead summary, research area, score, bio excerpt, last inbound message). Failure → returns `ai_skipped="upstream_error"`.
+3. On success: stores `prep_md`, `ai_drafted_at`, `ai_model="gemini-2.5-flash"`. Logs to `ai_decisions` via shared `services/gemini.py`.
+
+**Idempotency:** Subsequent opens skip the draft if `ai_drafted_at` is set OR `prep_md` is non-empty.
+
+**Tables touched:** `bookings` (4 new columns: `title`, `meeting_url`, `duration_min`, `rescheduled_from`), `meeting_notes` (1:1, PK=booking_id), `meeting_tasks` (1:N, partial index `ix_tasks_open_due ON meeting_tasks(due_at) WHERE done=FALSE AND due_at IS NOT NULL`).
+
+**Frontend:** Drawer (`MeetingDrawer.vue`) used from `/followups`, deep-link `/meeting/:bookingId` (`MeetingView.vue`). Editor (`MeetingNoteEditor.vue`, 4-second debounced autosave). Per-row (`MeetingTaskRow.vue`).
+
+**Bubbles into:** `/admin/followups` (new `open_meeting_tasks` section), `/admin/briefing` (`meeting_open_tasks` + `meetings_today` priorities), `/admin/bookings/calendar` (rows gain `booking_id`, `open_task_count`, `has_notes`).
+
+#### Bookings Calendar (additional `routers/bookings.py` endpoint)
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `GET` | `/admin/bookings/calendar` | User | Calendar-shaped feed. Each row now includes `booking_id`, `open_task_count`, `has_notes` so the FE can flag meetings needing prep. |
 
 #### Webhooks (`routers/webhooks.py`) — 3 endpoints
 
@@ -555,7 +686,26 @@ In development mode, `Base.metadata.create_all(bind=engine)` auto-creates all ta
 | `POST` | `/webhooks/n8n` | HMAC | Legacy eSteps Leads callback (backward compatible) |
 | `POST` | `/webhooks/n8n/simulate` | None (dev) | Simulation endpoint for testing (development only) |
 
-**Total: 35 endpoints** across 10 routers + 1 health check.
+**Total: 68+ endpoints** across 18 routers + 1 health check.
+
+### 5.7 Asset Explorer pattern
+
+Two parallel routers (`gtm.py`, `meets.py`) share a file-explorer shape backed by DB BLOB columns:
+- `strategy_assets` (GTM docs) — admin-gated `/admin/gtm/*`
+- `meet_assets` (meeting prep) — admin-gated `/admin/meets/*`
+
+Each exposes: `tree`, `strategy/{path}` (read), `download/{path}` (binary), `upload` (multipart, max 25 MB), `folder` (create), `{path}` DELETE, `sync` (re-walk disk). Allowed types: md/txt/rst/json/yaml/csv/pdf/docx/pptx/xlsx/png/jpg/svg/zip/log.
+
+Frontend: `GTMStrategy.vue` + `MeetsView.vue` consume via `assetExplorerAPI` factory in `api/index.js`. Tree node rendered by `GTMTreeNode.vue` (recursive).
+
+### 5.8 Services layer (`app/services/`)
+
+Shared service modules consumed across multiple routers:
+
+| Module | Purpose |
+|--------|---------|
+| `services/system_service.py` | Per-system KPI aggregation (executions, success rate, last run) used by `/admin/systems/*` and `/admin/systems/overview` |
+| `services/gemini.py` (NEW) | Shared Gemini 2.5 Flash client. Maintains a 60-second in-process spend cache, applies the daily budget guard via `gemini_today_spend_usd()` (compared against `settings.ai_daily_budget_usd`), uses `_COST_PER_CALL_USD = $0.0006` for accounting, and logs every call to `ai_decisions` via `record_decision_row()`. Consumed by meetings auto-draft, weekly memo, and ask-assistant. |
 
 ### 5.5 n8n Execution Sync (`sync_n8n.py`)
 
@@ -1224,6 +1374,26 @@ Two migration files:
 1. `0001_initial_schema.py` — base tables (leads, workflow_executions, users, etc.)
 2. `0002_multi_system.py` — adds `systems` table and `system_id` FK columns
 
+Additional migrations have since been added for `strategy_assets`, `meet_assets`, the bookings column additions, `meeting_notes`, and `meeting_tasks` (with the partial open-due index).
+
+### 10.5 Tests
+
+Meetings + cross-router bubble-up tests live under `backend/tests/`:
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| `tests/test_meetings_sync.py` | 5 | upsert from leads, idempotent re-run, ±5-minute reschedule window, dry_run flag, admin-only auth gate |
+| `tests/test_meetings_router.py` | 8 | list, detail, 404, auth, notes upsert, readonly forbidden, task CRUD cycle, cross-booking 404 |
+| `tests/test_meetings_ai.py` | 5 | auto-draft happy path, idempotency, 5xx graceful skip, budget exhausted skip, force regenerate (admin) |
+| `tests/test_followups_bubble.py` | 3 | overdue task surfaces in `/admin/followups`, briefing `meeting_open_tasks`, calendar rows include `booking_id`+`open_task_count`+`has_notes` |
+
+**Status:** RED-only pending operator provisioning `TEST_DATABASE_URL`. Run with:
+
+```bash
+cd backend
+python -m pytest tests/test_meetings_*.py tests/test_followups_bubble.py -v
+```
+
 ---
 
 ## 11. Design System
@@ -1302,24 +1472,21 @@ Two migration files:
 
 | Metric | Count |
 |--------|-------|
-| Backend routers | 10 |
-| API endpoints | 35 |
-| Database models (ORM) | 11 |
+| Backend routers | 18 |
+| API endpoints | 68+ |
+| Database models (ORM) | 14 |
 | Pydantic schemas | 30+ |
-| Frontend views | 13 |
-| Frontend components | 7 |
-| Frontend routes | 16 |
-| API client methods | 28 |
+| Frontend views | 25 |
+| Frontend components | 20+ |
+| Frontend routes | 25+ |
+| API client methods | 60+ |
 | Pinia stores | 2 |
 | n8n workflows monitored | 27 |
 | Automation systems | 5 |
 | Leads in production | 1,408 |
 | Emails tracked | 1,400 |
 | Executions synced | 349+ |
-| Lines of Python (backend) | ~3,000 |
-| Lines of Vue/JS (frontend) | ~2,500 |
-| Total lines of code | ~5,500 |
 
 ---
 
-*This document covers the complete system as of May 2026. For setup instructions, see the project README. For API testing, visit the Swagger UI at `http://localhost:8000/docs`.*
+*This document covers the complete system as last refreshed 2026-06-06. For setup instructions, see the project README. For API testing, visit the Swagger UI at `http://localhost:8000/docs`.*
