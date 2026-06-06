@@ -38,6 +38,23 @@
       </div>
     </SectionContainer>
 
+    <!-- Meetings & Tasks -->
+    <SectionContainer title="Meetings & Tasks" subtitle="Today's calendar + open meeting work">
+      <div class="grid grid-cols-2 gap-3">
+        <RouterLink to="/calendar" class="block p-3 border border-ctrl-border rounded hover:border-status-info">
+          <div class="text-2xs uppercase text-ctrl-muted">Meetings today</div>
+          <div class="text-2xl font-display text-ctrl-text tabnum">{{ b?.priorities?.meetings_today ?? 0 }}</div>
+        </RouterLink>
+        <RouterLink to="/followups#open_meeting_tasks" class="block p-3 border border-ctrl-border rounded hover:border-status-info">
+          <div class="text-2xs uppercase text-ctrl-muted">Open meeting tasks</div>
+          <div :class="(b?.priorities?.meeting_open_tasks ?? 0) > 0 ? 'text-status-warn' : 'text-ctrl-text'"
+               class="text-2xl font-display tabnum">
+            {{ b?.priorities?.meeting_open_tasks ?? 0 }}
+          </div>
+        </RouterLink>
+      </div>
+    </SectionContainer>
+
     <!-- Recommended to contact today -->
     <SectionContainer title="Recommended to Contact Today" subtitle="Ranked by score, uncontacted, and overdue signals">
       <Table :columns="prioColumns" :rows="priority" :loading="loading" :skeleton-rows="6" empty-message="No priority leads" :empty-icon="Flame">
@@ -97,7 +114,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { useStaleFetch } from '../composables/useStaleFetch'
 import { AlertCircle, Activity, Sparkles, Flame } from 'lucide-vue-next'
 import { adminAPI } from '../api/index.js'

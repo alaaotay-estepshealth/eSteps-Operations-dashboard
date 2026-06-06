@@ -148,7 +148,14 @@
             <li v-for="(e, i) in selected.timeline" :key="i" class="relative">
               <span class="absolute -left-[1.32rem] top-1 w-2 h-2 rounded-full" :class="eventDot(e.type)" />
               <div class="flex items-center justify-between gap-2">
-                <span class="text-sm text-ctrl-text">{{ e.label }}</span>
+                <RouterLink
+                  v-if="e.type === 'meeting' && e.booking_id"
+                  :to="`/meeting/${e.booking_id}`"
+                  class="text-sm text-status-info hover:underline"
+                >
+                  {{ e.label }}
+                </RouterLink>
+                <span v-else class="text-sm text-ctrl-text">{{ e.label }}</span>
                 <span class="text-2xs text-ctrl-dim tabnum whitespace-nowrap">{{ fmtDateTime(e.timestamp) }}</span>
               </div>
               <p v-if="e.detail" class="text-xs text-ctrl-muted mt-1 italic">"{{ e.detail }}"</p>
@@ -196,7 +203,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useStaleFetch } from '../composables/useStaleFetch'
 import { AlertCircle, Flame, Users } from 'lucide-vue-next'
 import { adminAPI } from '../api/index.js'
