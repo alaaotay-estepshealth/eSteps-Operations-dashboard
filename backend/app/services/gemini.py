@@ -80,24 +80,24 @@ def call_gemini(prompt: str, timeout: float = 30.0) -> str:
 def gemini_today_spend_usd(db: Session) -> float:
     """USD spent on Gemini today across all callers (60-s in-process cache).
 
-    Reads from `ai_decisions` if it exists; otherwise returns 0.0. The table
-    is created by webhooks/ai-decision; if it doesn't exist yet we silently
-    return 0 — guard is intentionally a no-op until the table is in place.
+    Reads from ai_requests.cost_usd. Wrapped in a SAVEPOINT so a missing
+    column or schema drift can't poison the caller's outer transaction.
     """
     now = time.time()
     if now < _spend_cache["expires_at"]:
         return _spend_cache["value"]
     try:
-        spent = (
-            db.execute(
-                text(
-                    "SELECT COALESCE(SUM(cost_estimate_usd), 0) FROM ai_decisions "
-                    "WHERE created_at::date = CURRENT_DATE"
-                )
-            ).scalar()
-            or 0.0
-        )
-        spent = float(spent)
+        with db.begin_nested():
+            spent = (
+                db.execute(
+                    text(
+                        "SELECT COALESCE(SUM(cost_usd), 0) FROM ai_requests "
+                        "WHERE created_at::date = CURRENT_DATE"
+                    )
+                ).scalar()
+                or 0.0
+            )
+            spent = float(spent)
     except Exception:
         spent = 0.0
     _spend_cache["value"] = spent

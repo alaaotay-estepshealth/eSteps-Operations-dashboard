@@ -59,9 +59,10 @@ def get_ticket_stats(
 
     categories = [
         TicketCategoryBreakdown(
-            category=c, count=cnt,
-            avg_priority=round(float(p), 1),
-            avg_confidence=round(float(conf), 3),
+            category=c or "uncategorized",
+            count=cnt,
+            avg_priority=round(float(p), 1) if p is not None else 0.0,
+            avg_confidence=round(float(conf), 3) if conf is not None else 0.0,
         )
         for c, cnt, p, conf in cat_rows
     ]

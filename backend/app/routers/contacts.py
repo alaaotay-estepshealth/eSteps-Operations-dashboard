@@ -110,6 +110,7 @@ def get_contact(
 ):
     # `to_jsonb(leads.*) ->> 'col'` returns NULL when the column is absent — keeps the
     # query schema-tolerant against the upstream Supabase leads DB.
+    # Accept either the EST-xxxx external `lead_id` or the row UUID `id`.
     row = db.execute(text(
         "SELECT id, lead_id, CONCAT(first_name, ' ', last_name) AS name, email, institution, "
         "department, position, research_interest, research_area, lead_score, esteps_relevance_score, "
@@ -132,7 +133,7 @@ def get_contact(
         "  to_jsonb(leads.*) ->> 'personal_url',"
         "  to_jsonb(leads.*) ->> 'profile_url'"
         ") AS website "
-        "FROM leads WHERE lead_id = :lid"
+        "FROM leads WHERE lead_id = :lid OR id::text = :lid"
     ), {"lid": lead_id}).mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail="Contact not found")

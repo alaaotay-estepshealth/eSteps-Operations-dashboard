@@ -178,7 +178,7 @@ def calendar_meetings(
     has_notes = {
         str(b)
         for (b,) in db.execute(
-            text("SELECT booking_id FROM meeting_notes WHERE booking_id = ANY(:ids)"),
+            text("SELECT booking_id FROM meeting_notes WHERE booking_id = ANY(CAST(:ids AS uuid[]))"),
             {"ids": [str(i) for i in booking_ids]},
         ).all() if booking_ids
     }
@@ -186,7 +186,7 @@ def calendar_meetings(
         str(bid): int(cnt)
         for bid, cnt in db.execute(
             text("SELECT booking_id, count(*) FROM meeting_tasks "
-                 "WHERE done = FALSE AND booking_id = ANY(:ids) GROUP BY booking_id"),
+                 "WHERE done = FALSE AND booking_id = ANY(CAST(:ids AS uuid[])) GROUP BY booking_id"),
             {"ids": [str(i) for i in booking_ids]},
         ).all() if booking_ids
     }
@@ -196,7 +196,7 @@ def calendar_meetings(
     if lead_ids:
         for r in leads_db.execute(
             text("SELECT id, CONCAT(first_name, ' ', last_name) AS name, institution "
-                 "FROM leads WHERE id = ANY(:ids)"),
+                 "FROM leads WHERE id = ANY(CAST(:ids AS uuid[]))"),
             {"ids": [str(i) for i in lead_ids]},
         ).mappings().all():
             leads_by_id[str(r["id"])] = r

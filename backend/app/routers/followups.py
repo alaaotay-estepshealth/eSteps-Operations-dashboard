@@ -49,7 +49,7 @@ def _open_meeting_tasks(db: Session, leads_db: Session, limit: int = 30) -> dict
     if lead_ids:
         for r in leads_db.execute(
             text("SELECT id, CONCAT(first_name, ' ', last_name) AS name "
-                 "FROM leads WHERE id = ANY(:ids)"),
+                 "FROM leads WHERE id = ANY(CAST(:ids AS uuid[]))"),
             {"ids": lead_ids},
         ).mappings().all():
             lead_names[str(r["id"])] = r["name"]
