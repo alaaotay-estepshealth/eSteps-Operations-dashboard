@@ -59,6 +59,28 @@ def test_generate_returns_202(client, operator_token, db, monkeypatch):
     assert body["status"] in ("queued", "in_flight")
 
 
+def test_generate_sets_system_id_with_empty_registry(client, operator_token, db, monkeypatch):
+    """Regression: ai_requests.system_id is NOT NULL in prod. The generate
+    endpoint must anchor the row to a system even when the systems registry is
+    empty — otherwise the INSERT 500s (the live ops.estepshealth.tech bug)."""
+    from app.models.system import System
+
+    _seed_corpus(db)
+    _mock_anthropic(monkeypatch)
+    db.query(System).delete()
+    db.commit()
+
+    r = client.post("/admin/insights/gtm-plan/generate",
+                    headers={"Authorization": f"Bearer {operator_token}"})
+    assert r.status_code == 202
+
+    req = db.query(AIRequest).filter(AIRequest.request_type == "gtm_retrospective").first()
+    assert req is not None
+    assert req.system_id is not None
+    # bootstrapped the primary system rather than failing the insert
+    assert db.query(System).filter(System.slug == "esteps-leads").first() is not None
+
+
 # ---------------------------------------------------------------------------
 # Task 10: GET /admin/insights/gtm-plan
 # ---------------------------------------------------------------------------
@@ -227,7 +249,9 @@ def test_gtm_tasks_calendar_returns_window(client, operator_token, db):
     ])
     db.commit()
     r = client.get(
-        f"/admin/gtm-tasks/calendar?from={(now - timedelta(days=1)).isoformat()}&to={(now + timedelta(days=30)).isoformat()}",
+        "/admin/gtm-tasks/calendar",
+        params={"from": (now - timedelta(days=1)).isoformat(),
+                "to": (now + timedelta(days=30)).isoformat()},
         headers={"Authorization": f"Bearer {operator_token}"},
     )
     assert r.status_code == 200
@@ -285,10 +309,10 @@ def test_webhook_routes_to_generator(client, db, monkeypatch):
 
     r = client.post("/webhooks/esteps-leads", json={
         "workflow_id": "est-gtm-ingest",
+        "workflow_name": "EST GTM Ingest",
         "execution_id": "exec-test-gtm-1",
         "status": "success",
-        "started_at": datetime.now(timezone.utc).isoformat(),
-        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "duration_seconds": 1.0,
     })
     assert r.status_code == 200
 

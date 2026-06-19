@@ -39,6 +39,8 @@ from app.models import (
     User,
 )
 from app.models.gtm_initiative import GtmInitiative
+from app.models.strategy_asset import StrategyAsset
+from app.models.system import System
 
 engine = create_engine(os.getenv("DATABASE_URL"), pool_pre_ping=True)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -63,6 +65,8 @@ def db_session():
 
 @pytest.fixture(autouse=True)
 def clean_db(db_session):
+    # Order matters: child rows / FK referrers first, systems last (audit_logs,
+    # ai_requests, workflow_executions all carry a system_id FK).
     for model in [
         GtmInitiative,
         AuditLog,
@@ -71,6 +75,8 @@ def clean_db(db_session):
         Ticket,
         Booking,
         User,
+        StrategyAsset,
+        System,
     ]:
         db_session.query(model).delete()
     db_session.commit()

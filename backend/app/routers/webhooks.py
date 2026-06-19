@@ -199,6 +199,7 @@ async def receive_system_callback(
             model=settings.gtm_model,
             status="pending_review",
             input_preview="webhook:est-gtm-ingest",
+            system_id=system.id,
         )
         db.add(ai_req)
         db.commit()

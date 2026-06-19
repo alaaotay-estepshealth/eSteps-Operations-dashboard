@@ -12,6 +12,7 @@ Authority: markdown wins. Initiatives land as status='suggested' — operators
 flip individual rows to 'applied' or 'rejected' from the dashboard.
 """
 import json
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -24,6 +25,7 @@ from app.config import settings
 from app.models.ai_request import AIRequest
 from app.models.gtm_initiative import GtmInitiative
 from app.models.strategy_asset import StrategyAsset
+from app.models.system import System
 from app.models.user import User
 from app.schemas.gtm_plan import GtmAiOutput
 from app.services.anthropic import call_anthropic, compute_cost, AnthropicError
@@ -36,6 +38,37 @@ class GtmExtractorError(RuntimeError):
 _GTM_CORPUS_PREFIX = "GTM-2026-OS/"
 _TEXT_EXTENSIONS = {".md", ".txt", ".rst"}
 _PERIOD_TO_DAYS = {"30d": 30, "60d": 60, "90d": 90}
+_DEFAULT_SYSTEM_SLUG = "esteps-leads"
+
+
+def default_system_id(db: Session) -> UUID:
+    """System to anchor a cross-product GTM AIRequest row to.
+
+    ai_requests.system_id is NOT NULL (migration 0002). GTM plans span every
+    product, so they are anchored to the primary system (esteps-leads) — the
+    same row 0002 backfills existing ai_requests to. Falls back to the oldest
+    active system, and bootstraps an esteps-leads row if the registry is empty
+    (e.g. a schema created via create_all that never ran the 0002 seed).
+    """
+    system = (
+        db.query(System).filter(System.slug == _DEFAULT_SYSTEM_SLUG).first()
+        or db.query(System)
+        .filter(System.is_active.is_(True))
+        .order_by(System.created_at.asc())
+        .first()
+    )
+    if system is None:
+        system = System(
+            slug=_DEFAULT_SYSTEM_SLUG,
+            name="eSteps Leads",
+            description="Academic researcher outreach and partnership pipeline",
+            webhook_secret=secrets.token_urlsafe(32),
+            is_active=True,
+        )
+        db.add(system)
+        db.commit()
+        db.refresh(system)
+    return system.id
 
 
 def load_corpus(db: Session) -> List[Dict[str, Any]]:
@@ -188,6 +221,7 @@ def generate_gtm_plan(db: Session, ai_req: Optional[AIRequest] = None) -> AIRequ
             model=settings.gtm_model,
             status="pending_review",
             input_preview="GTM ingest run",
+            system_id=default_system_id(db),
         )
         db.add(ai_req)
         db.commit()

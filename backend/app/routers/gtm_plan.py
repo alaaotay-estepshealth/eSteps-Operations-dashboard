@@ -29,6 +29,7 @@ from app.schemas.gtm_plan import (
 )
 from app.services.gtm_extractor import (
     GtmExtractorError,
+    default_system_id,
     generate_gtm_plan,
     gtm_today_spend_usd,
 )
@@ -103,6 +104,7 @@ def generate_endpoint(
         model=settings.gtm_model,
         status="pending_review",
         input_preview="manual" if background is None else "background",
+        system_id=default_system_id(db),
     )
     db.add(ai_req)
     db.commit()
