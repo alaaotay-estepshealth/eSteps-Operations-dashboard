@@ -6,8 +6,8 @@
           <th
             v-for="col in columns"
             :key="col.key ?? col"
-            class="px-4 py-2.5 font-display font-semibold text-2xs uppercase tracking-label text-ctrl-muted whitespace-nowrap"
-            :class="col.align === 'right' ? 'text-right' : 'text-left'"
+            class="px-4 font-display font-semibold text-2xs uppercase tracking-label text-ctrl-muted whitespace-nowrap"
+            :class="[col.align === 'right' ? 'text-right' : 'text-left', dense ? 'py-1.5' : 'py-2.5']"
           >
             {{ col.label ?? col }}
           </th>
@@ -16,7 +16,7 @@
       <tbody>
         <template v-if="loading">
           <tr v-for="n in skeletonRows" :key="`sk-${n}`" class="border-b border-ctrl-divide">
-            <td v-for="col in columns" :key="col.key ?? col" class="px-4 py-3">
+            <td v-for="col in columns" :key="col.key ?? col" class="px-4" :class="dense ? 'py-2' : 'py-3'">
               <div class="h-3 rounded bg-ctrl-raised animate-pulse" :style="{ width: skeletonWidth() }" />
             </td>
           </tr>
@@ -31,8 +31,8 @@
             <td
               v-for="col in columns"
               :key="col.key ?? col"
-              class="px-4 py-2.5 text-ctrl-text"
-              :class="col.align === 'right' ? 'text-right tabnum' : ''"
+              class="px-4 text-ctrl-text align-middle"
+              :class="[col.align === 'right' ? 'text-right tabnum' : '', dense ? 'py-1.5' : 'py-2.5']"
             >
               <slot :name="`cell-${col.key ?? col}`" :row="row" :value="row[col.key ?? col]">
                 {{ row[col.key ?? col] }}
@@ -64,6 +64,7 @@ defineProps({
   skeletonRows: { type: Number,  default: 5 },
   emptyMessage: { type: String,  default: 'No data available' },
   emptyIcon:    { default: () => Inbox },
+  dense:        { type: Boolean, default: false },
 })
 
 function skeletonWidth() {

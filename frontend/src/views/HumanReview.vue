@@ -14,6 +14,7 @@
 
     <SectionContainer title="Review Queue" subtitle="AI decisions requiring human verification before actioning">
       <Table
+        dense
         :columns="queueColumns"
         :rows="queue"
         :loading="loading"
@@ -22,13 +23,13 @@
         :empty-icon="CheckCircle"
       >
         <template #cell-created_at="{ value }">
-          <span class="tabnum text-ctrl-muted text-xs">{{ formatDate(value) }}</span>
+          <span class="tabnum text-ctrl-muted text-2xs whitespace-nowrap">{{ formatDate(value) }}</span>
         </template>
         <template #cell-request_type="{ value }">
-          <span class="font-medium text-ctrl-text capitalize">{{ value.replace(/_/g, ' ') }}</span>
+          <span class="font-medium text-ctrl-text capitalize text-xs whitespace-nowrap">{{ value.replace(/_/g, ' ') }}</span>
         </template>
         <template #cell-input_preview="{ value }">
-          <span class="text-xs text-ctrl-muted truncate block max-w-xs" :title="value">{{ value ?? '—' }}</span>
+          <span class="text-xs text-ctrl-muted truncate block max-w-[15rem]" :title="value">{{ value ?? '—' }}</span>
         </template>
         <template #cell-confidence_score="{ value }">
           <span class="tabnum font-medium" :class="confColor(value)">
@@ -45,23 +46,23 @@
         </template>
         <template #cell-actions="{ row }">
           <div v-if="canReview" class="space-y-1.5">
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-1 whitespace-nowrap justify-end">
               <button
                 @click="resolve(row.id, 'approve')"
                 :disabled="resolving === row.id"
-                class="px-2.5 py-1 text-2xs bg-status-ok-bg text-status-ok border border-status-ok rounded
+                class="px-2 py-0.5 text-2xs bg-status-ok-bg text-status-ok border border-status-ok rounded
                        hover:opacity-80 active:scale-[0.97] disabled:opacity-40 transition-all tabnum"
               >Approve</button>
               <button
                 @click="resolve(row.id, 'reject')"
                 :disabled="resolving === row.id"
-                class="px-2.5 py-1 text-2xs bg-status-err-bg text-status-err border border-status-err rounded
+                class="px-2 py-0.5 text-2xs bg-status-err-bg text-status-err border border-status-err rounded
                        hover:opacity-80 active:scale-[0.97] disabled:opacity-40 transition-all tabnum"
               >Reject</button>
               <button
                 @click="resolve(row.id, 'override')"
                 :disabled="resolving === row.id"
-                class="px-2.5 py-1 text-2xs bg-status-warn-bg text-status-warn border border-status-warn rounded
+                class="px-2 py-0.5 text-2xs bg-status-warn-bg text-status-warn border border-status-warn rounded
                        hover:opacity-80 active:scale-[0.97] disabled:opacity-40 transition-all tabnum"
               >Override</button>
             </div>
@@ -113,12 +114,17 @@ const queueColumns = [
   { key: 'input_preview',    label: 'Input Preview' },
   { key: 'confidence_score', label: 'Confidence', align: 'right' },
   { key: 'age_hours',        label: 'Age' },
-  { key: 'actions',          label: '' },
+  { key: 'actions',          label: '', align: 'right' },
 ]
 
 const slaBreaches = computed(() => queue.value.filter((r) => r.sla_breach).length)
 
-function formatDate(value) { return value ? new Date(value).toLocaleString() : '—' }
+function formatDate(value) {
+  if (!value) return '—'
+  return new Date(value).toLocaleString(undefined, {
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+}
 
 function confColor(value) {
   if (value == null) return 'text-ctrl-muted'
