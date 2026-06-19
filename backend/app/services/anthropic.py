@@ -38,7 +38,6 @@ def call_anthropic(
     user_message: str,
     model: str | None = None,
     max_tokens: int = 8192,
-    temperature: float = 0.2,
 ) -> Dict[str, Any]:
     """POST /v1/messages and return {text, usage}.
 
@@ -46,6 +45,10 @@ def call_anthropic(
     intended for caching should include `cache_control: {"type": "ephemeral"}`.
 
     Retries once on 5xx/timeouts; fails fast on 4xx.
+
+    Note: sampling params (temperature/top_p/top_k) are intentionally omitted —
+    the Opus 4.x models reject them with a 400 ("temperature is deprecated for
+    this model"). Output is steered by the prompt instead.
     """
     if not settings.anthropic_api_key:
         raise AnthropicError("Anthropic API key not configured (set ANTHROPIC_API_KEY).")
@@ -58,7 +61,6 @@ def call_anthropic(
     body = {
         "model": model or settings.gtm_model,
         "max_tokens": max_tokens,
-        "temperature": temperature,
         "system": system_blocks,
         "messages": [{"role": "user", "content": user_message}],
     }

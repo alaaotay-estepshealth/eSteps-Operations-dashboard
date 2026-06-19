@@ -36,6 +36,22 @@ def test_call_anthropic_happy_path(monkeypatch):
     assert "anthropic-version" in call_args.kwargs["headers"]
 
 
+def test_call_anthropic_omits_sampling_params(monkeypatch):
+    """Regression: Opus 4.x rejects temperature/top_p/top_k with a 400
+    ("temperature is deprecated for this model"). The request body must not
+    include any of them — this was the live GTM-plan generation failure."""
+    fake_post = MagicMock(return_value=_mock_response())
+    monkeypatch.setattr("httpx.Client.post", fake_post)
+    monkeypatch.setattr("app.services.anthropic.settings.anthropic_api_key", "test-key")
+
+    call_anthropic(system_blocks=[], user_message="x")
+    body = fake_post.call_args.kwargs["json"]
+    assert "temperature" not in body
+    assert "top_p" not in body
+    assert "top_k" not in body
+    assert body["messages"] == [{"role": "user", "content": "x"}]
+
+
 def test_call_anthropic_missing_key_raises(monkeypatch):
     monkeypatch.setattr("app.services.anthropic.settings.anthropic_api_key", "")
     with pytest.raises(AnthropicError, match="not configured"):
