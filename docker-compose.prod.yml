@@ -1,18 +1,58 @@
-version: "3.9"
-
-# Production compose — uses Supabase (no local DB service).
-# Copy backend/.env.example → backend/.env and fill all values before running.
+# Production compose — Coolify-adapted. External Supabase (no DB container).
 #
-# Deploy:
-#   docker compose -f docker-compose.prod.yml up -d --build
+# Routing: Coolify's Traefik proxy terminates TLS and forwards the assigned FQDN
+# to the frontend container's port 80. The frontend (nginx) reverse-proxies /api
+# to the backend by service name (http://backend:8000) over the compose network,
+# so the backend needs NO public domain and NO host port.
+#
+# NOTE: no `ports:` host-publishing here — host 80/8000 collide with Coolify's
+# proxy (80/443) and the Coolify UI (8000). `env_file: ./backend/.env` was also
+# removed: that file is gitignored and absent from Coolify's clone — all env vars
+# are injected from Coolify's Environment Variables UI instead. A manual
+# `docker compose` run now requires those vars exported in the shell.
 
 services:
   backend:
     build: ./backend
     restart: unless-stopped
-    env_file: ./backend/.env
-    ports:
-      - "8000:8000"
+    # Internal only — reachable as http://backend:8000 on the compose network.
+    expose:
+      - "8000"
+    # Backend Dockerfile CMD runs `alembic upgrade head` (idempotent: 0001→0002→0003)
+    # against DATABASE_URL before uvicorn binds. Values come from Coolify's UI.
+    # `:?` => deploy fails fast if a validator-critical secret is missing.
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:?}
+      - DATABASE_URL=${DATABASE_URL:?}
+      - JWT_SECRET=${JWT_SECRET:?}
+      - N8N_WEBHOOK_SECRET=${N8N_WEBHOOK_SECRET:?}
+      - AUTO_CREATE_DB=${AUTO_CREATE_DB:-false}
+      # Required for full functionality (no boot-fail; features 503/empty if unset)
+      - LEADS_DATABASE_URL=${LEADS_DATABASE_URL:-}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - N8N_BASE_URL=${N8N_BASE_URL:-}
+      - N8N_API_KEY=${N8N_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # Optional / defaulted
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-1440}
+      - AI_DAILY_BUDGET_USD=${AI_DAILY_BUDGET_USD:-10.0}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_API_URL=${ANTHROPIC_API_URL:-https://api.anthropic.com/v1/messages}
+      - ANTHROPIC_VERSION=${ANTHROPIC_VERSION:-2023-06-01}
+      - GTM_MODEL=${GTM_MODEL:-claude-opus-4-7}
+      - GTM_AI_BUDGET_USD=${GTM_AI_BUDGET_USD:-1.0}
+      - STRATEGY_DIR=${STRATEGY_DIR:-}
+      - MEET_DIR=${MEET_DIR:-}
+      - OPENCLAW_BASE_URL=${OPENCLAW_BASE_URL:-}
+      - OPENCLAW_HOOK_TOKEN=${OPENCLAW_HOOK_TOKEN:-}
+    healthcheck:
+      # /health is unauthenticated (backend/app/main.py).
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8000/health'); sys.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s   # gives `alembic upgrade head` time before checks count
 
   frontend:
     build:
@@ -20,7 +60,16 @@ services:
       dockerfile: Dockerfile.prod   # multi-stage: vite build → nginx static serve
     restart: unless-stopped
     depends_on:
-      - backend
-    # nginx serves the SPA and reverse-proxies /api → backend:8000 (see frontend/nginx.conf)
-    ports:
-      - "80:80"
+      backend:
+        condition: service_started
+    # Coolify routes the FQDN assigned in the UI to this container's port 80.
+    environment:
+      - SERVICE_FQDN_FRONTEND_80
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
