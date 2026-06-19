@@ -185,9 +185,10 @@ def _lead_summary(leads_db: Session, lead_id: UUID) -> MeetingLeadSummary | None
     row = (
         leads_db.execute(
             text(
+                # LEADS DB uses `position` (not title) and `notes` (no bio col).
                 "SELECT id, CONCAT(first_name, ' ', last_name) AS name, institution, "
-                "title, research_area, lead_score, stage, "
-                "LEFT(COALESCE(bio, ''), 400) AS bio_excerpt "
+                "position AS title, research_area, lead_score, stage, "
+                "LEFT(COALESCE(notes, ''), 400) AS bio_excerpt "
                 "FROM leads WHERE id = :id"
             ),
             {"id": str(lead_id)},

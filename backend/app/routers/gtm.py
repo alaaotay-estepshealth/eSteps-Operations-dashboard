@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session, defer
 
 from app.auth import require_admin
 from app.config import settings
-from app.database import engine, get_db
+from app.database import get_db
 from app.models.strategy_asset import StrategyAsset
 from app.models.user import User
 from app.schemas.responses import (
@@ -66,12 +66,6 @@ _SKIP_DIRS = {
 }
 _SEED_MAX_DEPTH = 6
 _SEED_MAX_PER_DIR = 250
-
-# Ensure the table exists at import time (cheap, idempotent).
-try:
-    StrategyAsset.__table__.create(bind=engine, checkfirst=True)
-except Exception:  # pragma: no cover — db may be unreachable at import time
-    pass
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────

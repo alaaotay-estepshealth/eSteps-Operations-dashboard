@@ -17,6 +17,11 @@
     <SectionContainer :title="windowLabel" subtitle="15-day window of scheduled meetings — click a card to open the contact">
       <template #action>
         <div class="flex items-center gap-1.5">
+          <button @click="showTasks = !showTasks"
+                  class="px-2.5 py-1 text-xs border rounded transition-all"
+                  :class="showTasks ? 'border-status-warn text-status-warn' : 'border-ctrl-border text-ctrl-muted'">
+            {{ showTasks ? 'Tasks on' : 'Tasks off' }}
+          </button>
           <button @click="shift(-15)" class="px-2.5 py-1 text-xs border border-ctrl-border rounded text-ctrl-muted hover:text-ctrl-text transition-all">‹ Back 15</button>
           <button @click="goToday"    class="px-2.5 py-1 text-xs border border-ctrl-border rounded text-ctrl-muted hover:text-ctrl-text transition-all">Today</button>
           <button @click="shift(15)"  class="px-2.5 py-1 text-xs border border-ctrl-border rounded text-ctrl-muted hover:text-ctrl-text transition-all">Forward 15 ›</button>
@@ -60,6 +65,17 @@
               </div>
             </button>
             <div v-if="!cell.meetings.length" class="text-2xs text-ctrl-dim">—</div>
+            <!-- GTM task chips -->
+            <div v-if="showTasks && tasksByDay[cell.dateKey]?.length" class="space-y-0.5 mt-1">
+              <button
+                v-for="t in tasksByDay[cell.dateKey]"
+                :key="t.id"
+                class="block w-full text-left px-1.5 py-0.5 rounded text-2xs border bg-status-warn-bg border-status-warn text-status-warn hover:brightness-110 transition-all"
+                :title="`${t.label} · ${t.assignee_display || 'unassigned'} · ${t.status}`"
+              >
+                <span class="truncate">📋 {{ t.label }}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -126,10 +142,13 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { AlertCircle, CalendarCheck } from 'lucide-vue-next'
-import { calendarAPI, bookingsAPI } from '../api/index.js'
+import { calendarAPI, bookingsAPI, gtmTasksAPI } from '../api/index.js'
+import { useAuthStore } from '../stores/auth.js'
 import SectionContainer from '../components/ui/SectionContainer.vue'
 import StatRow from '../components/ui/StatRow.vue'
 import Table from '../components/ui/Table.vue'
+
+const auth = useAuthStore()
 
 const WINDOW_DAYS = 15
 const router  = useRouter()
@@ -137,6 +156,32 @@ const meetings = ref([])
 const loading  = ref(false)
 const error    = ref('')
 const start    = ref(startOfWeekMonday(new Date()))
+
+// ── GTM task overlay ──────────────────────────────────────────────────────────
+const showTasks = ref(auth.role !== 'readonly')
+const gtmTasks  = ref([])
+
+const tasksByDay = computed(() => {
+  const byKey = {}
+  for (const t of gtmTasks.value) {
+    const key = (t.due_at || '').slice(0, 10)
+    if (!key) continue
+    byKey[key] = byKey[key] || []
+    byKey[key].push(t)
+  }
+  return byKey
+})
+
+async function loadTasks() {
+  const from = start.value.toISOString()
+  const to   = new Date(start.value.getTime() + WINDOW_DAYS * 86400000).toISOString()
+  try {
+    const r = await gtmTasksAPI.calendar(from, to)
+    gtmTasks.value = r.data
+  } catch {
+    gtmTasks.value = []
+  }
+}
 
 function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x }
 function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x }
@@ -182,6 +227,7 @@ const cells = computed(() => {
       month: day.toLocaleDateString('en-GB', { month: 'short' }),
       isToday: day.getTime() === today,
       isSunday,
+      dateKey: ymd,
       meetings: isSunday ? [] : meetings.value.filter(m => m.when.slice(0, 10) === ymd),
     })
   }
@@ -271,6 +317,7 @@ async function load() {
     bookingStats.value = data || {}
   } catch { /* non-fatal */ }
   await loadPast()
+  await loadTasks()
 }
 
 watch(start, load, { immediate: true })

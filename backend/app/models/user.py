@@ -17,3 +17,4 @@ class User(Base):
     hashed_password = Column(String(255))
     role = Column(String(50), default="readonly")  # admin | service | readonly
     is_active = Column(Boolean, default=True)
+    display_name = Column(String, nullable=True)

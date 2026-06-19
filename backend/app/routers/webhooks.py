@@ -1,21 +1,36 @@
 import hashlib
 import hmac
 import random
+import re
 import uuid
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Path, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Path, Request
 from sqlalchemy.orm import Session
 
+from app.auth import require_admin
 from app.config import settings
 from app.database import get_db
 from app.models.ai_request import AIRequest
 from app.models.audit_log import AuditLog
 from app.models.system import System
+from app.models.user import User
 from app.models.workflow_execution import WorkflowExecution
 from app.schemas.responses import AIDecisionIngest, N8NCallbackPayload
 
 AI_REVIEW_CONFIDENCE_THRESHOLD = 0.70  # below this, route decision to human review
+
+# Redact anything that looks like a provider key/token before it lands in the
+# audit-readable input_preview column (n8n prompts can echo secrets).
+_SECRET_PATTERNS = re.compile(
+    r"(sk-ant-[A-Za-z0-9_\-]+|sk-[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_\-]{20,}|Bearer\s+[A-Za-z0-9._\-]+)"
+)
+
+
+def _scrub_secrets(text: str | None) -> str | None:
+    if not text:
+        return text
+    return _SECRET_PATTERNS.sub("[redacted]", text)
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -125,7 +140,7 @@ def _record_ai_decision(payload: AIDecisionIngest, system_id, db: Session) -> AI
         tokens_used=payload.tokens_used,
         cost_usd=payload.cost_usd,
         latency_ms=payload.latency_ms,
-        input_preview=(payload.input_preview or "")[:200] or None,
+        input_preview=_scrub_secrets((payload.input_preview or "")[:200]) or None,
         ai_output=ai_output or None,
         confidence_score=conf,
         used_fallback=payload.used_fallback,
@@ -153,6 +168,7 @@ def _record_ai_decision(payload: AIDecisionIngest, system_id, db: Session) -> AI
 async def receive_system_callback(
     request: Request,
     payload: N8NCallbackPayload,
+    background_tasks: BackgroundTasks,
     system_slug: str = Path(...),
     x_n8n_signature: str = Header(None),
     db: Session = Depends(get_db),
@@ -170,6 +186,25 @@ async def receive_system_callback(
         return {"status": "duplicate", "message": "Execution already recorded"}
 
     execution = _record_execution(payload, system.id, db)
+
+    # Special-case: GTM ingest workflow kicks off the AI extractor.
+    if (payload.workflow_id or "").lower() == "est-gtm-ingest" and payload.status == "success":
+        from app.database import SessionLocal
+        from app.routers.gtm_plan import _run_background
+        from app.models.ai_request import AIRequest as _AIReq
+
+        ai_req = _AIReq(
+            request_type="gtm_retrospective",
+            provider="anthropic",
+            model=settings.gtm_model,
+            status="pending_review",
+            input_preview="webhook:est-gtm-ingest",
+        )
+        db.add(ai_req)
+        db.commit()
+        db.refresh(ai_req)
+        background_tasks.add_task(_run_background, SessionLocal, ai_req.id)
+
     return {"status": "recorded", "execution_id": execution.execution_id}
 
 
@@ -232,6 +267,7 @@ async def receive_n8n_callback(
 def simulate_n8n(
     count: int = 1,
     failure_rate: float = 0.12,
+    _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     if settings.environment != "development":

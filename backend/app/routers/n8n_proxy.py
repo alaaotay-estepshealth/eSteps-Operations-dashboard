@@ -39,7 +39,7 @@ def list_n8n_workflows(
 
 @router.get("/workflows/{workflow_id}", summary="Get a single n8n workflow")
 def get_n8n_workflow(
-    workflow_id: str = Path(...),
+    workflow_id: str = Path(..., pattern=r"^[A-Za-z0-9_-]{1,64}$"),
     _: User = Depends(get_current_user),
 ):
     try:
@@ -60,7 +60,7 @@ def get_n8n_workflow(
 
 @router.post("/workflows/{workflow_id}/execute", summary="Trigger an n8n workflow execution")
 def execute_n8n_workflow(
-    workflow_id: str = Path(...),
+    workflow_id: str = Path(..., pattern=r"^[A-Za-z0-9_-]{1,64}$"),
     _: User = Depends(require_operator),
 ):
     try:
@@ -83,7 +83,7 @@ def execute_n8n_workflow(
 
 @router.post("/workflows/{workflow_id}/activate", summary="Activate an n8n workflow")
 def activate_n8n_workflow(
-    workflow_id: str = Path(...),
+    workflow_id: str = Path(..., pattern=r"^[A-Za-z0-9_-]{1,64}$"),
     _: User = Depends(require_operator),
 ):
     try:
@@ -104,7 +104,7 @@ def activate_n8n_workflow(
 
 @router.post("/workflows/{workflow_id}/deactivate", summary="Deactivate an n8n workflow")
 def deactivate_n8n_workflow(
-    workflow_id: str = Path(...),
+    workflow_id: str = Path(..., pattern=r"^[A-Za-z0-9_-]{1,64}$"),
     _: User = Depends(require_operator),
 ):
     try:

@@ -170,4 +170,18 @@ export const suggestionsAPI = {
   forTicket: (ticketId) => api.get(`/admin/tickets/${ticketId}/suggestions`),
 }
 
+export const gtmPlanAPI = {
+  getPlan: () => api.get('/admin/insights/gtm-plan'),
+  getInitiatives: () => api.get('/admin/insights/gtm-plan/initiatives'),
+  generate: (force = false) => api.post('/admin/insights/gtm-plan/generate', { force }),
+  applyInitiative: (id) => api.post(`/admin/insights/gtm-plan/initiatives/${id}/apply`),
+  rejectInitiative: (id) => api.post(`/admin/insights/gtm-plan/initiatives/${id}/reject`),
+}
+
+export const gtmTasksAPI = {
+  list: (params = {}) => api.get('/admin/gtm-tasks', { params }),
+  calendar: (from, to) => api.get('/admin/gtm-tasks/calendar', { params: { from, to } }),
+  assign: (id, userId) => api.post(`/admin/gtm-tasks/${id}/assign`, { user_id: userId }),
+}
+
 export default api

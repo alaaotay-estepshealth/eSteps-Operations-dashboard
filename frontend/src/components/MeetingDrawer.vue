@@ -136,7 +136,7 @@ const whenLabel = computed(() => fmt(detail.value?.booking?.scheduled_for))
 
 watch(() => [props.open, props.bookingId], async ([open, id]) => {
   if (open && id) await load()
-})
+}, { immediate: true })
 
 async function load() {
   loading.value = true

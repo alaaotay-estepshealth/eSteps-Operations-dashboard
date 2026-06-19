@@ -15,11 +15,12 @@ services:
       - "8000:8000"
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod   # multi-stage: vite build → nginx static serve
     restart: unless-stopped
-    environment:
-      VITE_BACKEND_URL: ${BACKEND_PUBLIC_URL:-http://localhost:8000}
     depends_on:
       - backend
+    # nginx serves the SPA and reverse-proxies /api → backend:8000 (see frontend/nginx.conf)
     ports:
-      - "5173:5173"
+      - "80:80"

@@ -16,6 +16,28 @@
       <StatRow :stats="overnightStats" />
     </SectionContainer>
 
+    <!-- Decision Hub signpost -->
+    <RouterLink
+      to="/insights"
+      class="block bg-gradient-to-br from-status-info-bg/40 to-ctrl-panel border border-status-info/40 rounded p-4 transition-all duration-200 hover:border-status-info hover:shadow-float active:scale-[0.995] group"
+    >
+      <div class="flex items-center gap-4">
+        <div class="w-10 h-10 rounded bg-status-info-bg border border-status-info/40 flex items-center justify-center flex-shrink-0">
+          <Lightbulb class="w-5 h-5 text-status-info" />
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="font-display font-semibold text-sm text-ctrl-text">Decision Hub</div>
+          <div class="text-2xs text-ctrl-muted mt-0.5">
+            AI Strategy Memo · KPI vs target · Ops Assistant chat · WoW outreach trend
+          </div>
+        </div>
+        <div class="flex items-center gap-1 text-2xs text-status-info uppercase tracking-label font-display group-hover:gap-2 transition-all">
+          Go to Insights
+          <ArrowRight class="w-3.5 h-3.5" />
+        </div>
+      </div>
+    </RouterLink>
+
     <!-- Today's priorities -->
     <SectionContainer title="Today's Priorities" subtitle="Click to act">
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -116,7 +138,7 @@
 import { computed, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useStaleFetch } from '../composables/useStaleFetch'
-import { AlertCircle, Activity, Sparkles, Flame } from 'lucide-vue-next'
+import { AlertCircle, Activity, Sparkles, Flame, Lightbulb, ArrowRight } from 'lucide-vue-next'
 import { adminAPI } from '../api/index.js'
 import { useAuthStore } from '../stores/auth.js'
 import SectionContainer from '../components/ui/SectionContainer.vue'

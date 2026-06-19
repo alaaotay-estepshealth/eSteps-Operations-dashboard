@@ -1,4 +1,5 @@
 from app.models.system import System
+from app.models.lead import Lead
 from app.models.booking import Booking
 from app.models.ticket import Ticket
 from app.models.workflow_execution import WorkflowExecution
@@ -10,9 +11,11 @@ from app.models.meet_asset import MeetAsset
 from app.models.meeting_note import MeetingNote
 from app.models.meeting_task import MeetingTask
 from app.models.ai_suggestion import AISuggestion
+from app.models.gtm_initiative import GtmInitiative
 
 __all__ = [
 	"System",
+	"Lead",
 	"Booking",
 	"Ticket",
 	"WorkflowExecution",
@@ -24,4 +27,5 @@ __all__ = [
 	"MeetingNote",
 	"MeetingTask",
 	"AISuggestion",
+	"GtmInitiative",
 ]

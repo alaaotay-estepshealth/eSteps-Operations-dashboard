@@ -31,3 +31,10 @@ meet - *.pdf
 # operator-side smoke tools (do not commit)
 backend/_check_dbs.py
 backend/_seed_smoke.py
+# any local diagnostic script (prefix _) and screenshot dirs — never deploy
+_*.py
+**/_*.py
+_*_shots/
+**/_*_shots/
+# data exports / PII — never commit
+*.csv

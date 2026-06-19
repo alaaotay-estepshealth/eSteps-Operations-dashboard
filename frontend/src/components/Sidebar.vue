@@ -73,7 +73,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { LayoutDashboard, TrendingUp, Workflow, Brain, FileText, LogOut, Layers, ShieldCheck, Zap, Mail, HeartHandshake, CalendarCheck, CalendarDays, Ticket, Map, Printer, Lightbulb, Users, BellRing, Sunrise, Bot, UserCog, FolderKanban } from 'lucide-vue-next'
+import { LayoutDashboard, TrendingUp, Workflow, Brain, FileText, LogOut, Layers, ShieldCheck, Zap, Mail, HeartHandshake, CalendarCheck, CalendarDays, Ticket, Map, Printer, Lightbulb, Users, BellRing, Sunrise, Bot, UserCog, FolderKanban, ClipboardCheck, ClipboardList } from 'lucide-vue-next'
 import { useAuthStore } from '../stores/auth.js'
 import { useSidebarState } from '../composables/useSidebarState.js'
 
@@ -103,7 +103,8 @@ const nav = [
   { to: '/contacts',      label: 'Contacts',      icon: Users,           section: 'Pipeline',    roles: ALL },
   { to: '/emails',        label: 'Email Analytics', icon: Mail,          section: 'Pipeline',    roles: ALL },
   { to: '/calendar',      label: 'Calendar',      icon: CalendarDays,    section: 'Pipeline',    roles: ALL },
-  { to: '/meets',         label: 'Meet Prep',     icon: FolderKanban,    section: 'Pipeline',    roles: ALL },
+  { to: '/prep',          label: 'Meeting Prep',  icon: ClipboardCheck,  section: 'Pipeline',    roles: ALL },
+  { to: '/meets',         label: 'Materials',     icon: FolderKanban,    section: 'Pipeline',    roles: ALL },
   { to: '/opportunities', label: 'Deals',         icon: HeartHandshake,  section: 'Pipeline',    roles: OPS },
   { to: '/followups',     label: 'Follow-ups',    icon: BellRing,        section: 'Pipeline',    roles: OPS },
   { to: '/workflows',     label: 'Workflows',     icon: Workflow,        section: 'Automation',  roles: OPS },
@@ -112,6 +113,7 @@ const nav = [
   { to: '/agent',         label: 'OpenClaw Agent', icon: Bot,            section: 'Automation',  roles: OPS },
   { to: '/review',        label: 'Review Queue',  icon: ShieldCheck,     section: 'Automation',  roles: OPS },
   { to: '/tickets',       label: 'Tickets',       icon: Ticket,          section: 'Strategy',    roles: OPS },
+  { to: '/tasks',         label: 'Tasks',         icon: ClipboardList,   section: 'Strategy',    roles: ALL },
   { to: '/gtm',           label: 'GTM Strategy',  icon: Map,             section: 'Strategy',    roles: ADM },
   { to: '/system',        label: 'System Logs',   icon: FileText,        section: 'Strategy',    roles: ALL },
   { to: '/report',        label: 'Report',        icon: Printer,         section: 'Strategy',    roles: ALL },

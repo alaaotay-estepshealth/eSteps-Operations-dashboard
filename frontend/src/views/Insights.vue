@@ -86,6 +86,8 @@
       </SectionContainer>
     </div>
 
+    <GTMPlanCard />
+
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
       <SectionContainer title="Outreach Sequence" subtitle="Leads reached at each touch (Day 1 → 21)">
         <div v-if="loading" class="h-40 bg-ctrl-raised rounded animate-pulse" />
@@ -220,6 +222,7 @@ import SectionContainer from '../components/ui/SectionContainer.vue'
 import HeatMap from '../components/ui/HeatMap.vue'
 import AssistantPanel from '../components/AssistantPanel.vue'
 import Markdown from '../components/ui/Markdown.vue'
+import GTMPlanCard from '../components/GTMPlanCard.vue'
 import { useDailyMemo } from '../composables/useDailyMemo.js'
 
 const router    = useRouter()

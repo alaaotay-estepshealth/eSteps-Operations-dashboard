@@ -56,7 +56,9 @@ def apply_suggestion(
             text(
                 "UPDATE ai_suggestions SET status='applied', applied_at=now(), "
                 "applied_by=:user, "
-                "applied_payload=COALESCE(:override::jsonb, payload), "
+                # CAST(...) form instead of `::jsonb` — SQLAlchemy treats `::`
+                # as a named-bind marker and breaks parsing.
+                "applied_payload=COALESCE(CAST(:override AS jsonb), payload), "
                 "updated_at=now() "
                 "WHERE id=:id AND status='pending' "
                 "RETURNING id, entity_type, entity_id, payload, applied_payload, "

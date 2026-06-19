@@ -20,10 +20,11 @@ Convert 972 academic researchers into 30–50 research partnerships through auto
 [AI Influencer]    ─┘                              │
                                            FastAPI Backend
                                                    │
-                                           Vue 3 Dashboard (25 views)
+                                           Vue 3 Dashboard (26 views)
                                     /systems  /overview  /pipeline  /emails
                                     /bookings  /opportunities  /workflows
-                                    /n8n  /ai  /review  /tickets  /gtm  /system
+                                    /n8n  /ai  /review  /tickets  /tasks
+                                    /gtm  /system
 ```
 
 ### Key principles
@@ -67,7 +68,7 @@ Convert 972 academic researchers into 30–50 research partnerships through auto
 | `/bookings` | BookingsView | Upcoming/past meetings, no-show rate, status filter |
 | `/opportunities` | OpportunitiesDeals | Deal pipeline funnel, tier breakdown, paginated deals |
 | `/followups` | FollowupsView | Overdue / due-today / this-week / upcoming-meetings / hot-needing-action + Reschedule/Drop actions |
-| `/calendar` | CalendarView | Meeting calendar — month/week view across all bookings |
+| `/calendar` | CalendarView | Meeting calendar — 15-day grid across all bookings; overlays **GTM task chips** (operator+admin default-on, readonly default-off) with toggle |
 | `/meeting/:bookingId` | MeetingView | Per-meeting deep-link — prep notes, tasks, AI auto-draft, recap |
 
 ### Automation
@@ -83,6 +84,7 @@ Convert 972 academic researchers into 30–50 research partnerships through auto
 | Route | View | Purpose |
 |---|---|---|
 | `/tickets` | TicketsView | Ticket queue with inline admin status update, category breakdown |
+| `/tasks` | TasksView | **RBAC-filtered GTM task list** — admin sees all 30/60/90-day initiatives; operator/readonly see only their own. Filters by period + status. Apply/Reject for operator+. |
 | `/gtm` | GTMStrategy | Browse 13+ strategy markdown files by directory with inline viewer |
 | `/meets` | MeetsView | Meet prep asset explorer (per-meeting briefing docs) |
 | `/report` | ReportView | Print-friendly executive report (Campaign Progress, KPIs, AI Ops, Workflow Health) |
@@ -115,20 +117,55 @@ _Last updated: 2026-06-06 (after meeting-notes feature ship)_
 - **Charts** — reusable inline-SVG `BarChart` / `LineChart` / `DonutChart` / `HeatMap`; clickable drill-downs from KPI cards, chart bars, and table rows
 - **Craft pass (impeccable)** — new views aligned to the Control Room Minimalism system: shared `StatRow` for display strips, established `hover:bg-ctrl-raised hover:shadow-float active:scale-[0.99]` card states, global focus-visible ring, status-only color
 - **Meeting prep notes + tasks + AI auto-draft** (ES-OPS-09-MEET-NOTES) — shipped 2026-06-06 across commits `0b95ef5..1395c7e`. New `/meeting/:bookingId` deep-link route + Followups/Briefing/Contacts wiring + 8 endpoints on `/admin/meetings/*` + Gemini-powered auto-draft of prep notes on first open. See [docs/PLATFORM_OVERVIEW.md](docs/PLATFORM_OVERVIEW.md#meeting-prep) and the [spec](docs/superpowers/specs/2026-06-05-meeting-notes-and-tickets-design.md) for full detail.
+- **GTM Strategy Ingest — Claude Opus 4.7** (ES-OPS-09-GTM-INGEST) — shipped 2026-06-07. Monthly n8n cron (`0 9 1 * *`) reads `GTM-2026-OS/` markdown from `strategy_assets`, calls Claude Opus 4.7 with ephemeral prompt caching, emits a structured 30/60/90-day plan (executive summary + KPI targets + risk flags + recommended focus). Output lands as:
+  - **`<GTMPlanCard>`** embedded in `/insights` (after Goal Progress) — markdown memo + KPI table with per-row Apply/Reject for operator+, Regenerate button (polls 60s), "View sources" drill-down to the strategy files.
+  - **`/tasks` route (new)** — RBAC-filtered initiative list: admin sees all; operator/readonly see only `assignee_user_id = me`. Filters by period + status. Empty-state messages differ per role.
+  - **`/calendar` overlay** — yellow `📋 task × N unit` chips on the 15-day grid via `GET /admin/gtm-tasks/calendar`, with Tasks-on/off toggle.
+  - **8 new endpoints** under `/admin/insights/gtm-plan/*` and `/admin/gtm-tasks/*` (generate, list, apply/reject, RBAC list, calendar window, admin reassign). Authority: **markdown wins** — KPIs land as `status='suggested'` and never overwrite `applied`/`rejected`. Re-runs only supersede prior `suggested`. Cost: ~$0.15/month at monthly cadence (cached) with a dedicated `GTM_AI_BUDGET_USD` guard separate from the Gemini pool. See [spec](docs/superpowers/specs/2026-06-07-gtm-strategy-ingest-design.md) and [plan](docs/superpowers/plans/2026-06-07-gtm-strategy-ingest.md).
 
 ### ⏳ Pending — needs YOU (console / deploy / n8n)
 
 These are the remaining actions to fully complete every phase. None block the dashboard from running; each one lights up a capability.
 
-1. **Restart the dev server** — Vite must reload to show the new nav: **Briefing (landing), Insights, Contacts, Follow-ups, OpenClaw Agent** (`npm run dev` + hard refresh). Log in as **admin** for AI memo / assistant / agent / write actions.
-2. **Activate OpenClaw** (enables the `/agent` action launcher):
+1. **Restart the dev server** — Vite must reload to show the new nav: **Briefing (landing), Insights, Contacts, Follow-ups, OpenClaw Agent, Tasks** (`npm run dev` + hard refresh). Log in as **admin** for AI memo / assistant / agent / write actions.
+
+2. **Activate GTM Strategy Ingest** (lights up the GTMPlanCard on `/insights`, the `/tasks` view, and Calendar chip overlay) — 4 quick steps:
+   1. **Apply the migration** to your ops Supabase project (`postgres.gniumhgmskcjmifqxxay`, eu-west-1):
+      ```sql
+      -- Run in Supabase SQL editor, or via psql:
+      -- dashboard-system/backend/app/migrations/202606071400_gtm_initiatives.sql
+      ```
+      Adds `gtm_initiatives` table + `users.display_name` column. **Idempotent** — safe to re-run. (Also already mirrored in `dashboard-system/schema.sql` for fresh setups.)
+   2. **Add the Anthropic key** — `dashboard-system/backend/.env`:
+      ```dotenv
+      ANTHROPIC_API_KEY=sk-ant-api03-...     # from console.anthropic.com
+      GTM_AI_BUDGET_USD=1.0                  # already set; raise if you re-run often
+      ```
+      Restart backend.
+   3. **Seed assignee names** (optional but recommended) — so AI-extracted assignees route to real users. In `/users` (admin-only) or via SQL:
+      ```sql
+      UPDATE users SET display_name = 'Nidhal'                    WHERE username = 'nidhal';
+      UPDATE users SET display_name = 'Alaa'                      WHERE username = 'alaa';
+      INSERT INTO users (username, email, hashed_password, role, display_name, is_active)
+        VALUES ('growth', 'growth@estepshealth.com', '<hash>', 'operator', 'Growth Content Associate', true);
+      ```
+      Without these, initiatives still land — they just show up as unassigned (admin can manually reassign via the API).
+   4. **Import + activate the n8n cron** (or skip for now and use the Regenerate button manually):
+      - Import `Lead Generation System/EST-GTM-Ingest.json` into your n8n instance.
+      - Set the `ESTEPS_BACKEND_URL` env var to your backend's public URL.
+      - Wire `X-N8N-Signature` to match the existing `esteps-leads` system's `webhook_secret` (the workflow POSTs to `/webhooks/esteps-leads` with `workflow_id=est-gtm-ingest`).
+      - **Activate** the workflow when ready (it ships deactivated).
+
+   First run will read `GTM-2026-OS/*` (~75k tokens) and emit a structured plan. Subsequent monthly runs hit the prompt cache → ~$0.15/run.
+
+3. **Activate OpenClaw** (enables the `/agent` action launcher):
    - In OpenClaw: set `hooks.enabled = true` and a dedicated `hooks.token`.
    - In `backend/.env`: `OPENCLAW_BASE_URL=https://openclaw.estepshealth.tech` and `OPENCLAW_HOOK_TOKEN=<that token>`; restart backend.
-3. **AI views need data** — add an HTTP node in each n8n AI workflow to POST decisions to `/webhooks/{slug}/ai-decision`; `ai_requests` is empty so AI Monitor / Review stay hollow until then.
-4. **Confirm pause semantics** — `Pause` / `Reschedule` clear/reset `next_send_date`; verify the EST-2 outreach workflow selects leads by `next_send_date` (else `Mark cold` / `Drop` always stops outreach).
-5. **Alert / digest delivery** — n8n job polling `GET /admin/dashboard/alerts` → Slack/email; optional daily `/report` PDF digest.
-6. **Rotate secrets** — n8n API key, ops + leads DB passwords, `JWT_SECRET`, `GEMINI_API_KEY`, and the OpenClaw `hooks.token` (all were in plaintext env / shared in chat). Already gitignored; keep them out of any pushed repo.
-7. **Deploy hardening** — set `ENVIRONMENT=production` (enables HMAC), add the prod frontend origin to `CORS_ORIGINS`, and set `GEMINI_API_KEY` + `OPENCLAW_*` in the deployed environment (else those features 503 gracefully).
+4. **AI views need data** — add an HTTP node in each n8n AI workflow to POST decisions to `/webhooks/{slug}/ai-decision`; `ai_requests` is empty so AI Monitor / Review stay hollow until then.
+5. **Confirm pause semantics** — `Pause` / `Reschedule` clear/reset `next_send_date`; verify the EST-2 outreach workflow selects leads by `next_send_date` (else `Mark cold` / `Drop` always stops outreach).
+6. **Alert / digest delivery** — n8n job polling `GET /admin/dashboard/alerts` → Slack/email; optional daily `/report` PDF digest.
+7. **Rotate secrets** — n8n API key, ops + leads DB passwords, `JWT_SECRET`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, and the OpenClaw `hooks.token` (all were in plaintext env / shared in chat). Already gitignored; keep them out of any pushed repo.
+8. **Deploy hardening** — set `ENVIRONMENT=production` (enables HMAC), add the prod frontend origin to `CORS_ORIGINS`, and set `GEMINI_API_KEY` + `ANTHROPIC_API_KEY` + `OPENCLAW_*` in the deployed environment (else those features 503 gracefully).
 
 ### ⏳ Pending — code (ready to build)
 
@@ -382,7 +419,8 @@ python -m venv .venv
 # Git Bash
 source .venv/Scripts/activate
 # PowerShell
-# .\.venv\Scripts\Activate.ps1
+ .\.venv\Scripts\Activate.ps1
+
 pip install -r requirements.txt
 python -m app.seed                              # seeds 5 systems + demo data
 uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -392,7 +430,9 @@ cd frontend
 
 npm install 
 
-npm run dev      # → http://localhost:5173
+npm run dev     
+
+# → http://localhost:5173
 ```
 
 ### Local Docker (dev only)

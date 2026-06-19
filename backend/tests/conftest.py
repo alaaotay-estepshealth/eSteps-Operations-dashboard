@@ -31,9 +31,6 @@ if "supabase" in _active_db and not os.getenv("TEST_DATABASE_URL"):
 from app.main import app
 from app.database import Base, get_db
 from app.models import (
-    Lead,
-    EmailLog,
-    Opportunity,
     Booking,
     Ticket,
     WorkflowExecution,
@@ -41,6 +38,7 @@ from app.models import (
     AuditLog,
     User,
 )
+from app.models.gtm_initiative import GtmInitiative
 
 engine = create_engine(os.getenv("DATABASE_URL"), pool_pre_ping=True)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -66,14 +64,12 @@ def db_session():
 @pytest.fixture(autouse=True)
 def clean_db(db_session):
     for model in [
+        GtmInitiative,
         AuditLog,
         AIRequest,
         WorkflowExecution,
         Ticket,
-        Opportunity,
         Booking,
-        EmailLog,
-        Lead,
         User,
     ]:
         db_session.query(model).delete()
@@ -141,6 +137,23 @@ def operator_token(db_session):
         )
         db_session.commit()
     return create_access_token({"sub": "test-op", "role": "operator"})
+
+
+@pytest.fixture()
+def readonly_token(db_session):
+    existing = db_session.query(User).filter(User.username == "test-ro").first()
+    if not existing:
+        db_session.add(
+            User(
+                username="test-ro",
+                email="test-ro@example.com",
+                hashed_password="x",
+                role="readonly",
+                is_active=True,
+            )
+        )
+        db_session.commit()
+    return create_access_token({"sub": "test-ro", "role": "readonly"})
 
 
 @pytest.fixture()
