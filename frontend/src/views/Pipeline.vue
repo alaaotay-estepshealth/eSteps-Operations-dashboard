@@ -165,7 +165,7 @@ const totalLeads   = ref(0)
 const currentOffset = ref(0)
 const pageSize     = 20
 
-const stages = ['new', 'introduced', 'pitching', 'call_requested', 'cold', 'dead']
+const stages = ['new', 'introduced', 'pitching', 'call_requested', 'engaged', 'meeting_booked', 'cold', 'dead']
 const filters = ref({ stage: '', research_interest: '', score_min: null, score_max: null })
 const researchAreas = ref([])
 

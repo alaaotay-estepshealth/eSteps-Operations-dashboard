@@ -226,7 +226,7 @@ const pageSize = 25
 const selected = ref(null)
 const acting   = ref(false)
 
-const stages = ['new', 'introduced', 'pitching', 'engaged', 'call_requested', 'cold']
+const stages = ['new', 'introduced', 'pitching', 'call_requested', 'engaged', 'meeting_booked', 'cold', 'dead']
 const filters = ref({ search: '', hot: false, replied: '', stage: '' })
 
 const scheduleOpen = ref(false)
