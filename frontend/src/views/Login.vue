@@ -35,7 +35,6 @@
               v-model="password"
               type="password"
               class="w-full bg-ctrl-surface border border-ctrl-border rounded text-sm text-ctrl-text px-3 py-2.5 placeholder-ctrl-dim transition-colors focus:border-status-info focus:outline-none"
-              placeholder="••••••••"
               autocomplete="current-password"
               required
             />
