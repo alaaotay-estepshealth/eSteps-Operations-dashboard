@@ -12,7 +12,7 @@
       <SectionContainer title="Delivery by Step" subtitle="Sequence step performance">
         <Table
           :columns="stepColumns"
-          :rows="stats.per_step"
+          :rows="stats.step_metrics"
           :loading="loading"
           :skeleton-rows="5"
           empty-message="No step data"
@@ -29,20 +29,18 @@
         <div v-if="loading" class="space-y-3">
           <div v-for="i in 3" :key="i" class="h-8 bg-ctrl-raised rounded animate-pulse" />
         </div>
-        <div v-else-if="!stats.ab_comparison?.length">
+        <div v-else-if="!abRows.length">
           <EmptyState :icon="Split" message="No A/B data" />
         </div>
         <div v-else class="divide-y divide-ctrl-divide">
-          <div v-for="v in stats.ab_comparison" :key="v.variant" class="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+          <div v-for="v in abRows" :key="v.variant" class="flex items-center justify-between py-3 first:pt-0 last:pb-0">
             <div>
               <span class="font-medium text-ctrl-text">Variant {{ v.variant }}</span>
               <span class="text-2xs text-ctrl-muted ml-2">{{ v.sent }} sent</span>
+              <span v-if="stats.ab_comparison?.winner === v.variant" class="text-2xs text-status-ok ml-2 uppercase tracking-label">winner</span>
             </div>
             <div class="flex items-center gap-3">
-              <span class="tabnum text-xs text-ctrl-muted">{{ v.open_rate_pct?.toFixed(1) }}% open</span>
-              <Badge :variant="v.open_rate_pct >= 30 ? 'success' : v.open_rate_pct >= 15 ? 'warning' : 'error'">
-                {{ v.delivered }} delivered
-              </Badge>
+              <span class="tabnum text-xs text-ctrl-muted">{{ v.reply_rate?.toFixed(1) }}% reply</span>
             </div>
           </div>
         </div>
@@ -115,7 +113,16 @@ import SectionContainer from '../components/ui/SectionContainer.vue'
 import StatRow from '../components/ui/StatRow.vue'
 import Table from '../components/ui/Table.vue'
 
-const stats   = ref({ total_sent: 0, delivery_rate_pct: 0, open_rate_pct: 0, bounce_rate_pct: 0, per_step: [], ab_comparison: [] })
+const stats   = ref({ total_sent: 0, delivery_rate_pct: 0, open_rate_pct: 0, bounce_rate_pct: 0, step_metrics: [], ab_comparison: null })
+
+const abRows = computed(() => {
+  const ab = stats.value.ab_comparison
+  if (!ab || (ab.variant_a_sent === 0 && ab.variant_b_sent === 0)) return []
+  return [
+    { variant: 'A', sent: ab.variant_a_sent, reply_rate: ab.variant_a_open_rate },
+    { variant: 'B', sent: ab.variant_b_sent, reply_rate: ab.variant_b_open_rate },
+  ]
+})
 const logs    = ref([])
 const loading = ref(false)
 const error   = ref('')

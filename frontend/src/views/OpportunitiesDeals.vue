@@ -16,14 +16,14 @@
             <div class="h-2.5 w-14 bg-ctrl-raised rounded animate-pulse" />
           </div>
         </div>
-        <div v-else-if="!stats.stage_summary?.length">
+        <div v-else-if="!stats.stages?.length">
           <EmptyState :icon="TrendingUp" message="No pipeline data" />
         </div>
         <div v-else class="space-y-3.5">
-          <div v-for="stage in stats.stage_summary" :key="stage.stage">
+          <div v-for="stage in stats.stages" :key="stage.stage">
             <div class="flex items-center justify-between mb-1.5 text-xs">
               <span class="text-ctrl-text capitalize">{{ stage.stage.replace(/_/g, ' ') }}</span>
-              <span class="tabnum text-ctrl-muted">{{ stage.count }}<span class="text-ctrl-dim ml-1">${{ (stage.value ?? 0).toLocaleString() }}</span></span>
+              <span class="tabnum text-ctrl-muted">{{ stage.count }}<span class="text-ctrl-dim ml-1">${{ (stage.total_value_usd ?? 0).toLocaleString() }}</span></span>
             </div>
             <div class="h-1 rounded-full bg-ctrl-border overflow-hidden">
               <div class="h-full rounded-full bg-status-info transition-all duration-500" :style="{ width: `${stagePct(stage)}%` }" />
@@ -36,15 +36,15 @@
         <div v-if="loading" class="space-y-2">
           <div v-for="i in 3" :key="i" class="h-9 bg-ctrl-raised rounded animate-pulse" />
         </div>
-        <div v-else-if="!stats.tier_summary?.length">
+        <div v-else-if="!stats.tiers?.length">
           <EmptyState :icon="Layers" message="No tier data" />
         </div>
         <div v-else class="divide-y divide-ctrl-divide">
-          <div v-for="tier in stats.tier_summary" :key="tier.tier" class="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
+          <div v-for="tier in stats.tiers" :key="tier.tier" class="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
             <span class="text-sm text-ctrl-text capitalize">{{ tier.tier?.replace(/_/g, ' ') ?? 'Unknown' }}</span>
             <div class="flex items-center gap-3">
               <span class="tabnum text-ctrl-muted text-xs">{{ tier.count }} deals</span>
-              <Badge variant="info">${{ (tier.avg_value ?? 0).toLocaleString() }} avg</Badge>
+              <Badge variant="info">${{ (tier.avg_deal_value_usd ?? 0).toLocaleString() }} avg</Badge>
             </div>
           </div>
         </div>
@@ -73,7 +73,7 @@
         <template #cell-stage="{ value }">
           <Badge :variant="stageVariant(value)">{{ value }}</Badge>
         </template>
-        <template #cell-deal_value="{ value }">
+        <template #cell-deal_value_usd="{ value }">
           <span class="tabnum">${{ (value ?? 0).toLocaleString() }}</span>
         </template>
         <template #cell-partnership_tier="{ value }">
@@ -107,7 +107,7 @@ import SectionContainer from '../components/ui/SectionContainer.vue'
 import StatRow from '../components/ui/StatRow.vue'
 import Table from '../components/ui/Table.vue'
 
-const stats       = ref({ pipeline_value: 0, won_value: 0, active_count: 0, avg_deal_value: 0, stage_summary: [], tier_summary: [] })
+const stats       = ref({ total_pipeline_value: 0, won_value: 0, active_deals: 0, avg_deal_value: 0, stages: [], tiers: [] })
 const opps        = ref([])
 const loading     = ref(false)
 const error       = ref('')
@@ -120,7 +120,7 @@ const stageOptions = ['open', 'qualified', 'proposal', 'negotiation', 'won', 'lo
 const oppColumns = [
   { key: 'lead_name',        label: 'Lead' },
   { key: 'stage',            label: 'Stage' },
-  { key: 'deal_value',       label: 'Value',  align: 'right' },
+  { key: 'deal_value_usd',   label: 'Value',  align: 'right' },
   { key: 'partnership_tier', label: 'Tier' },
   { key: 'created_at',       label: 'Created' },
 ]
@@ -128,9 +128,9 @@ const oppColumns = [
 const kpiStats = computed(() => {
   const s = stats.value
   return [
-    { label: 'Pipeline Value', value: `$${(s.pipeline_value ?? 0).toLocaleString()}` },
+    { label: 'Pipeline Value', value: `$${(s.total_pipeline_value ?? 0).toLocaleString()}` },
     { label: 'Won Value',      value: `$${(s.won_value ?? 0).toLocaleString()}`,      status: 'ok' },
-    { label: 'Active Deals',   value: s.active_count ?? 0 },
+    { label: 'Active Deals',   value: s.active_deals ?? 0 },
     { label: 'Avg Deal Size',  value: `$${(s.avg_deal_value ?? 0).toLocaleString()}` },
   ]
 })
@@ -143,7 +143,7 @@ function stageVariant(s) {
 }
 
 function stagePct(stage) {
-  const total = stats.value.stage_summary.reduce((s, x) => s + (x.count ?? 0), 0)
+  const total = (stats.value.stages ?? []).reduce((s, x) => s + (x.count ?? 0), 0)
   return total ? ((stage.count / total) * 100).toFixed(1) : 0
 }
 
