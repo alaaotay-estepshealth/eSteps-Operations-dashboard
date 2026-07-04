@@ -33,6 +33,9 @@ const routes = [
   { path: '/prep',          component: () => import('../views/MeetingsPrepView.vue'),    meta: { roles: ALL } },
   { path: '/report',        component: () => import('../views/ReportView.vue'),          meta: { roles: ALL } },
   { path: '/users',         component: () => import('../views/UsersView.vue'),           meta: { roles: ADM } },
+  { path: '/email-analytics', redirect: '/emails' },
+  { path: '/meeting-prep',    redirect: '/prep' },
+  { path: '/:pathMatch(.*)*', component: () => import('../views/NotFound.vue'), meta: { public: true } },
 ]
 
 const router = createRouter({
