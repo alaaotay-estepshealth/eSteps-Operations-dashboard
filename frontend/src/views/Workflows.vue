@@ -26,7 +26,9 @@
               <span class="text-sm font-medium text-ctrl-text truncate">{{ wf.name }}</span>
             </div>
             <div class="tabnum text-2xs text-ctrl-muted ml-6">
-              {{ wf.total_runs }} runs · {{ wf.avg_duration_seconds }}s avg · {{ wf.retries_today }} retries today
+              {{ wf.total_runs }} runs total · {{ wf.avg_duration_seconds }}s avg
+              <span v-if="wf.retries_today > 0"> · {{ wf.retries_today }} retries today</span>
+              <span v-else class="text-ctrl-dim"> · 0 retries today</span>
             </div>
           </div>
           <div class="flex items-center gap-3 flex-shrink-0">

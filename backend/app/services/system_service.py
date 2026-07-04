@@ -44,7 +44,8 @@ class SystemService:
         return self.db.query(System).filter(System.is_active == True).order_by(System.name).all()
 
     def get_system_stats(self, system_id: UUID, days: int = 7) -> dict:
-        since = datetime.utcnow() - timedelta(days=days)
+        # `days` retained for signature compatibility but success rate is all-time
+        # so idle systems don't mis-report 0% when the recent window happens to be empty.
         today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
 
         total = self.db.query(WorkflowExecution).filter(
@@ -53,18 +54,15 @@ class SystemService:
         success = self.db.query(WorkflowExecution).filter(
             WorkflowExecution.system_id == system_id,
             WorkflowExecution.status == "success",
-            WorkflowExecution.started_at >= since,
         ).count()
         failed = self.db.query(WorkflowExecution).filter(
             WorkflowExecution.system_id == system_id,
             WorkflowExecution.status == "failed",
-            WorkflowExecution.started_at >= since,
         ).count()
         period_total = success + failed
 
         avg_dur = self.db.query(func.avg(WorkflowExecution.duration_seconds)).filter(
             WorkflowExecution.system_id == system_id,
-            WorkflowExecution.started_at >= since,
         ).scalar() or 0.0
 
         errors_today = self.db.query(AuditLog).filter(
