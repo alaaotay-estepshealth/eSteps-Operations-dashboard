@@ -89,8 +89,8 @@
             <option value="">All areas</option>
             <option v-for="r in researchAreas" :key="r" :value="r">{{ r }}</option>
           </select>
-          <input v-model.number="filters.score_min" @change="loadLeads()" type="number" min="0" max="100" placeholder="Min score" class="bg-ctrl-panel border border-ctrl-border rounded text-xs text-ctrl-text px-2 py-1.5 w-20 focus:outline-none tabnum" />
-          <input v-model.number="filters.score_max" @change="loadLeads()" type="number" min="0" max="100" placeholder="Max score" class="bg-ctrl-panel border border-ctrl-border rounded text-xs text-ctrl-text px-2 py-1.5 w-20 focus:outline-none tabnum" />
+          <input v-model.number="filters.score_min" @change="loadLeads()" type="number" min="0" max="100" placeholder="Min score" class="bg-ctrl-panel border border-ctrl-border rounded text-xs text-ctrl-text px-2 py-1.5 w-28 focus:outline-none tabnum" />
+          <input v-model.number="filters.score_max" @change="loadLeads()" type="number" min="0" max="100" placeholder="Max score" class="bg-ctrl-panel border border-ctrl-border rounded text-xs text-ctrl-text px-2 py-1.5 w-28 focus:outline-none tabnum" />
         </div>
       </template>
 
@@ -146,6 +146,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useStaleFetch } from '../composables/useStaleFetch'
+import { useToast } from '../composables/useToast.js'
 import { AlertCircle, BookOpen, CalendarCheck, MessageSquare, RefreshCw, Send, Star, Target, TrendingUp, Users } from 'lucide-vue-next'
 import { adminAPI } from '../api/index.js'
 import { useAuthStore } from '../stores/auth.js'
@@ -164,7 +165,7 @@ const totalLeads   = ref(0)
 const currentOffset = ref(0)
 const pageSize     = 20
 
-const stages = ['new', 'introduced', 'pitching', 'call_requested', 'cold']
+const stages = ['new', 'introduced', 'pitching', 'call_requested', 'cold', 'dead']
 const filters = ref({ stage: '', research_interest: '', score_min: null, score_max: null })
 const researchAreas = ref([])
 
@@ -179,6 +180,7 @@ const researchColumns = [
 
 const auth     = useAuthStore()
 const canAct   = computed(() => ['admin', 'operator'].includes(auth.role))
+const toast    = useToast()
 const actingId = ref(null)
 
 const leadsColumns = computed(() => {
@@ -198,9 +200,17 @@ async function act(row, action, value = null) {
   error.value = ''
   try {
     await adminAPI.leadAction(row.lead_id, { action, value })
+    const toastMessages = {
+      resume:       'Lead resumed',
+      pause:        'Lead paused',
+      set_priority: 'Priority bumped to A',
+      mark_cold:    'Marked cold',
+    }
+    toast.show(toastMessages[action] ?? 'Done')
     await loadLeads()
-  } catch {
+  } catch (err) {
     error.value = `Action failed for ${row.first_name} ${row.last_name}.`
+    toast.show(err?.message || 'Action failed', 'err', 3500)
   } finally {
     actingId.value = null
   }

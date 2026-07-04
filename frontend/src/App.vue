@@ -13,6 +13,7 @@
         </router-view>
       </main>
     </div>
+    <Toast />
   </div>
 </template>
 
@@ -23,6 +24,7 @@ import { adminAPI } from './api/index.js'
 import Sidebar from './components/Sidebar.vue'
 import TopBar from './components/TopBar.vue'
 import AlertBanner from './components/AlertBanner.vue'
+import Toast from './components/Toast.vue'
 
 const route       = useRoute()
 const isLoginPage = computed(() => route.path === '/login')
