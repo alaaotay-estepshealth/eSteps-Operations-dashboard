@@ -22,7 +22,6 @@
               v-model.trim="username"
               type="text"
               class="w-full bg-ctrl-surface border border-ctrl-border rounded text-sm text-ctrl-text px-3 py-2.5 placeholder-ctrl-dim transition-colors focus:border-status-info focus:outline-none"
-              placeholder="admin"
               autocomplete="username"
               required
             />

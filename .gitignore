@@ -38,3 +38,7 @@ _*_shots/
 **/_*_shots/
 # data exports / PII — never commit
 *.csv
+# local secret tokens handed to tooling — never commit
+*.token
+.coolify_token
+.hostinger_token
