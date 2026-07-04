@@ -47,7 +47,15 @@
         >
           <div class="flex items-start justify-between mb-4">
             <div class="min-w-0 flex-1">
-              <div class="font-display font-semibold text-sm text-ctrl-text truncate">{{ sys.name }}</div>
+              <div class="flex items-center">
+                <div class="font-display font-semibold text-sm text-ctrl-text truncate">{{ displayName(sys.slug, sys.name) }}</div>
+                <span
+                  v-if="sys.slug === 'solar-leads'"
+                  class="ml-2 px-2 py-0.5 rounded text-2xs font-medium bg-ctrl-panel border border-ctrl-border text-ctrl-muted uppercase tracking-label"
+                >
+                  In design · CBM1
+                </span>
+              </div>
               <div class="tabnum text-2xs text-ctrl-dim mt-0.5">{{ sys.slug }}</div>
             </div>
             <Badge :variant="sys.is_active ? 'success' : 'default'" class="ml-3 flex-shrink-0">
@@ -99,6 +107,18 @@ import EmptyState from '../components/ui/EmptyState.vue'
 import SectionContainer from '../components/ui/SectionContainer.vue'
 import StatRow from '../components/ui/StatRow.vue'
 
+const DISPLAY_NAME = {
+  'ai-influencer': 'Jane',
+  'ai-chatbot':    'Chatbot',
+  'solar-leads':   'ROBOSAN',
+  'esteps-leads':  'eSteps Leads',
+  'wam-agency':    'WAM Agency',
+}
+
+function displayName(slug, fallback) {
+  return DISPLAY_NAME[slug] ?? fallback
+}
+
 const overview = ref(null)
 const loading  = ref(false)
 const error    = ref('')
@@ -120,7 +140,7 @@ const kpiStats = computed(() => {
   if (!overview.value) return [
     { label: 'Active Systems',  value: '—', loading: true },
     { label: 'Executions (7d)', value: '—', loading: true },
-    { label: 'Global Success',  value: '—', loading: true },
+    { label: 'Success rate (weighted)', value: '—', loading: true },
     { label: 'Errors Today',    value: '—', loading: true },
     { label: 'AI Cost Today',   value: '—', loading: true },
   ]
@@ -128,7 +148,7 @@ const kpiStats = computed(() => {
   return [
     { label: 'Active Systems',  value: o.system_count,                   sub: 'registered' },
     { label: 'Executions (7d)', value: o.total_executions_7d,            sub: 'all systems' },
-    { label: 'Global Success',  value: `${o.global_success_rate_pct}%`,  status: o.global_success_rate_pct >= 90 ? 'ok' : o.global_success_rate_pct >= 70 ? 'warn' : 'err' },
+    { label: 'Success rate (weighted)', value: o.global_success_rate_pct != null ? `${o.global_success_rate_pct}%` : '—', status: o.global_success_rate_pct != null ? (o.global_success_rate_pct >= 90 ? 'ok' : o.global_success_rate_pct >= 70 ? 'warn' : 'err') : undefined },
     { label: 'Errors Today',    value: o.errors_today,                   status: o.errors_today > 0 ? 'err' : undefined },
     { label: 'AI Cost Today',   value: `$${(o.ai_cost_today_usd ?? 0).toFixed(3)}`, sub: 'all systems' },
   ]

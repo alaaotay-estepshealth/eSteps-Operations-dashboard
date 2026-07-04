@@ -11,6 +11,28 @@ from app.models.system import System
 from app.models.workflow_execution import WorkflowExecution
 
 
+def compute_weighted_success_rate(systems) -> float | None:
+    """
+    Weighted mean of per-system success_rate_pct, weighted by total_executions.
+    Systems with total_executions == 0 are excluded from both numerator and
+    denominator so idle systems can't drag the rate to zero.
+    Returns None when no system has executed anything.
+    """
+    weighted_num = sum(
+        s.success_rate_pct * s.total_executions
+        for s in systems
+        if s.total_executions > 0
+    )
+    weighted_den = sum(
+        s.total_executions
+        for s in systems
+        if s.total_executions > 0
+    )
+    if not weighted_den:
+        return None
+    return round(weighted_num / weighted_den, 1)
+
+
 class SystemService:
     def __init__(self, db: Session):
         self.db = db
@@ -165,13 +187,23 @@ class SystemService:
                 **stats,
             })
 
+        # Build lightweight proxies so compute_weighted_success_rate can read
+        # .success_rate_pct and .total_executions from the same per_system dicts
+        # that the frontend receives — single source of truth for the aggregate.
+        class _DictProxy:
+            __slots__ = ("success_rate_pct", "total_executions")
+
+            def __init__(self, d):
+                self.success_rate_pct = d["success_rate_pct"]
+                self.total_executions = d["total_executions"]
+
+        proxies = [_DictProxy(s) for s in per_system]
+
         return {
             "system_count": len(systems),
             "total_executions_7d": total_executions,
             "total_failures_7d": total_failures,
-            "global_success_rate_pct": round(
-                (total_executions - total_failures) / total_executions * 100, 1
-            ) if total_executions > 0 else 0.0,
+            "global_success_rate_pct": compute_weighted_success_rate(proxies),
             "errors_today": errors_today,
             "ai_cost_today_usd": round(float(ai_cost_today), 4),
             "systems": per_system,
