@@ -188,10 +188,10 @@ const funnelSteps = computed(() => {
 const kpiStats = computed(() => {
   const m = metrics.value
   return [
-    { label: 'Hours Saved',     value: `${m.hours_saved_week}h`,         delta: m.delta_hours_saved,      sub: 'this week' },
+    { label: 'Hours Saved',     value: m.leads_processed_week > 0 ? `${m.hours_saved_week}h` : '—',         delta: m.delta_hours_saved,      sub: 'this week' },
     { label: 'Leads Processed', value: m.leads_processed_week,           delta: m.delta_leads_processed,  sub: 'this week' },
     { label: 'Automation',      value: `${m.automation_rate_pct}%`,      delta: m.delta_automation_rate,   status: m.automation_rate_pct >= 90 ? 'ok' : 'warn' },
-    { label: 'AI Accuracy',     value: `${m.ai_accuracy_pct}%`,          delta: m.delta_ai_accuracy,      status: m.ai_accuracy_pct >= 95 ? 'ok' : 'warn' },
+    { label: 'AI Accuracy',     value: (m.ai_calls_today ?? 0) > 0 ? `${m.ai_accuracy_pct}%` : '—',          delta: m.delta_ai_accuracy,      status: m.ai_accuracy_pct >= 95 ? 'ok' : 'warn' },
     { label: 'Review Queue',    value: m.human_review_queue_count,       status: m.human_review_queue_count > 0 ? 'warn' : undefined, sub: 'SLA 4h' },
   ]
 })
