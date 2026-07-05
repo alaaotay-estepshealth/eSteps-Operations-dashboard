@@ -753,6 +753,7 @@ def get_alerts(
     fails = db.query(WorkflowExecution).filter(
         WorkflowExecution.status == "failed",
         WorkflowExecution.started_at >= day_ago,
+        WorkflowExecution.resolved.is_(False),
     ).count()
     if fails:
         alerts.append(AlertItem(
@@ -791,6 +792,46 @@ def get_alerts(
         ))
 
     return alerts
+
+
+@router.post("/workflows/executions/{execution_id}/resolve")
+def resolve_workflow_failure(
+    execution_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_operator),
+):
+    """Acknowledge a failed workflow execution so it stops firing the alert.
+
+    Sets resolved=True on the row; both /dashboard/alerts and per-system last_error
+    now filter by resolved=False, so a resolved failure drops out of the banner and
+    the red execution-failed card on /systems on the next poll. Row itself stays for
+    audit history."""
+    row = db.query(WorkflowExecution).filter(WorkflowExecution.id == execution_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Workflow execution not found")
+    if row.status != "failed":
+        raise HTTPException(status_code=400, detail="Only failed executions can be resolved")
+
+    already = bool(row.resolved)
+    row.resolved = True
+    row.updated_at = datetime.utcnow()
+
+    db.add(AuditLog(
+        level="INFO",
+        source="admin_dashboard",
+        message=f"Workflow failure acknowledged by {current_user.username} "
+                f"(workflow={row.workflow_name} exec={row.execution_id})",
+        entity_id=str(row.id),
+        entity_type="workflow_execution",
+        user_id=current_user.username,
+    ))
+    db.commit()
+    return {
+        "status": "resolved",
+        "execution_id": str(row.id),
+        "workflow_id": row.workflow_id,
+        "was_already_resolved": already,
+    }
 
 
 # ─── n8n Execution Sync ──────────────────────────────────────────────────────

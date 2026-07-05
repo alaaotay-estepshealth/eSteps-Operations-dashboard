@@ -117,6 +117,17 @@
         <template #cell-error_message="{ value }">
           <span class="text-status-err text-xs truncate block max-w-xs">{{ value }}</span>
         </template>
+        <template #cell-actions="{ row }">
+          <button
+            v-if="!resolvedIds.has(row.id)"
+            :disabled="resolvingId === row.id"
+            @click="resolveFailure(row)"
+            class="text-2xs px-2 py-1 rounded border border-ctrl-border hover:border-status-ok hover:text-status-ok text-ctrl-muted disabled:opacity-40 transition-colors"
+          >
+            {{ resolvingId === row.id ? 'Resolving…' : 'Resolve' }}
+          </button>
+          <span v-else class="text-2xs text-status-ok">✓ Resolved</span>
+        </template>
       </Table>
     </SectionContainer>
 
@@ -150,7 +161,25 @@ const failureColumns = [
   { key: 'workflow',      label: 'Workflow' },
   { key: 'started_at',    label: 'Time' },
   { key: 'error_message', label: 'Error' },
+  { key: 'actions',       label: '', align: 'right' },
 ]
+
+const resolvingId = ref(null)
+const resolvedIds = ref(new Set())
+
+async function resolveFailure(row) {
+  if (!row?.id || resolvedIds.value.has(row.id)) return
+  resolvingId.value = row.id
+  try {
+    await adminAPI.resolveWorkflowFailure(row.id)
+    resolvedIds.value = new Set([...resolvedIds.value, row.id])
+    await load()
+  } catch (e) {
+    error.value = e?.response?.data?.detail || 'Failed to resolve execution.'
+  } finally {
+    resolvingId.value = null
+  }
+}
 
 function formatDate(value) {
   if (!value) return '—'

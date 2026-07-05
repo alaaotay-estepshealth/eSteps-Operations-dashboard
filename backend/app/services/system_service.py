@@ -83,6 +83,7 @@ class SystemService:
         last_error = self.db.query(WorkflowExecution.error_message).filter(
             WorkflowExecution.system_id == system_id,
             WorkflowExecution.status == "failed",
+            WorkflowExecution.resolved.is_(False),
         ).order_by(WorkflowExecution.started_at.desc()).first()
 
         return {

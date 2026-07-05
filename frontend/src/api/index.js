@@ -59,6 +59,8 @@ export const adminAPI = {
   getReviewQueue: () => api.get('/admin/human-review/queue'),
   resolveReview: (id, resolution) => api.post(`/admin/human-review/queue/${id}/resolve`, resolution),
   syncN8n: (limit = 100) => api.post(`/admin/sync-n8n?limit=${limit}`),
+  resolveWorkflowFailure: (executionId) =>
+    api.post(`/admin/workflows/executions/${encodeURIComponent(executionId)}/resolve`),
 }
 
 export const systemsAPI = {
