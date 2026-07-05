@@ -110,7 +110,7 @@ const nav = [
   { to: '/workflows',     label: 'Workflows',     icon: Workflow,        section: 'Automation',  roles: OPS },
   { to: '/n8n',           label: 'n8n Workflows', icon: Zap,             section: 'Automation',  roles: OPS },
   { to: '/ai',            label: 'AI Monitor',    icon: Brain,           section: 'Automation',  roles: ALL },
-  { to: '/agent',         label: 'OpenClaw Agent', icon: Bot,            section: 'Automation',  roles: OPS },
+  { to: '/agent',         label: 'OpenClaw Agent', icon: Bot,            section: 'Automation',  roles: ADM },
   { to: '/review',        label: 'Review Queue',  icon: ShieldCheck,     section: 'Automation',  roles: OPS },
   { to: '/tickets',       label: 'Tickets',       icon: Ticket,          section: 'Strategy',    roles: OPS },
   { to: '/tasks',         label: 'Tasks',         icon: ClipboardList,   section: 'Strategy',    roles: ALL },

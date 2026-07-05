@@ -44,14 +44,16 @@
           <span class="tabnum text-ctrl-dim text-xs">{{ value }}</span>
         </template>
         <template #cell-actions="{ row }">
-          <div v-if="isAdmin" class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1.5">
             <button
+              v-if="canTrigger"
               @click="trigger(row.id, row.name)"
               :disabled="acting === row.id"
               class="px-2.5 py-1 text-2xs bg-status-info-bg text-status-info border border-status-info rounded
                      hover:opacity-80 active:scale-[0.97] disabled:opacity-40 transition-all tabnum"
             >Trigger</button>
             <button
+              v-if="canToggle"
               @click="toggleActive(row)"
               :disabled="acting === row.id"
               class="px-2.5 py-1 text-2xs rounded hover:opacity-80 active:scale-[0.97] disabled:opacity-40 transition-all tabnum"
@@ -79,7 +81,11 @@ import StatRow from '../components/ui/StatRow.vue'
 import Table from '../components/ui/Table.vue'
 
 const auth      = useAuthStore()
-const isAdmin   = computed(() => auth.role === 'admin' || auth.role === 'operator')
+// Operators can re-trigger executions (per report §IV.5.8 failure-mode ops).
+// Only admins can flip a workflow's active state (per report §II.1 — operators
+// "cannot change system configuration").
+const canTrigger = computed(() => auth.role === 'admin' || auth.role === 'operator')
+const canToggle  = computed(() => auth.role === 'admin')
 
 const workflows = ref([])
 const loading   = ref(false)

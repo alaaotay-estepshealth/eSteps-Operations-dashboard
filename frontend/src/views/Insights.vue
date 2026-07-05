@@ -56,8 +56,13 @@
       </div>
     </SectionContainer>
 
-    <!-- AI Ops Assistant -->
-    <SectionContainer title="Ask the Assistant" subtitle="Natural-language questions over your live pipeline data">
+    <!-- AI Ops Assistant — operator+ only (report §II.1: readonly cannot alter state,
+         and the assistant burns AI budget on every call). -->
+    <SectionContainer
+      v-if="canUseAssistant"
+      title="Ask the Assistant"
+      subtitle="Natural-language questions over your live pipeline data"
+    >
       <AssistantPanel />
     </SectionContainer>
 
@@ -224,8 +229,11 @@ import AssistantPanel from '../components/AssistantPanel.vue'
 import Markdown from '../components/ui/Markdown.vue'
 import GTMPlanCard from '../components/GTMPlanCard.vue'
 import { useDailyMemo } from '../composables/useDailyMemo.js'
+import { useAuthStore } from '../stores/auth.js'
 
 const router    = useRouter()
+const auth      = useAuthStore()
+const canUseAssistant = computed(() => auth.role === 'admin' || auth.role === 'operator')
 const data      = ref({ kpis: [], recommendations: [], sequence_funnel: [], score_distribution: [], segments: [], comparison: { metrics: [] }, monthly: [], trend: [], goals: {}, followups: {} })
 const heatmap   = ref({ steps: [], areas: [] })
 const loading   = ref(false)

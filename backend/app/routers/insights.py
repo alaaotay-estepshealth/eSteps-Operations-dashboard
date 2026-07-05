@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_admin
+from app.auth import get_current_user, require_admin, require_operator
 from app.database import get_db, get_leads_db
 from app.models.user import User
 from app.models.workflow_execution import WorkflowExecution
@@ -298,8 +298,10 @@ def assistant(
     payload: AssistantQuery,
     leads_db: Session = Depends(get_leads_db),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_operator),
 ):
+    """AI Ops Assistant — burns AI budget on every call, so readonly is blocked
+    per report §II.1 ('Cannot ... alter state'). Operator+ only."""
     q = (payload.question or "").strip()
     if not q:
         raise HTTPException(status_code=422, detail="Question is required")

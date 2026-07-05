@@ -101,9 +101,10 @@ def run_agent(
 def wake(
     ev: WakeEvent,
     db: Session = Depends(get_db),
-    user: User = Depends(require_operator),
+    user: User = Depends(require_admin),
 ):
-    """Notify the OpenClaw agent of an event (e.g. an alert) — it decides what to do."""
+    """Notify the OpenClaw agent of an event (e.g. an alert) — it decides what to do.
+    ADMIN-ONLY per report §IV.4.4: /wake is part of the OpenClaw admin-only bridge."""
     _require_config()
     text = (ev.text or "").strip()
     if not text:

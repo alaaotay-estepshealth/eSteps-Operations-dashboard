@@ -2,7 +2,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi.responses import JSONResponse
 
-from app.auth import get_current_user, require_operator
+from app.auth import get_current_user, require_admin, require_operator
 from app.config import settings
 from app.models.user import User
 
@@ -84,7 +84,7 @@ def execute_n8n_workflow(
 @router.post("/workflows/{workflow_id}/activate", summary="Activate an n8n workflow")
 def activate_n8n_workflow(
     workflow_id: str = Path(..., pattern=r"^[A-Za-z0-9_-]{1,64}$"),
-    _: User = Depends(require_operator),
+    _: User = Depends(require_admin),
 ):
     try:
         resp = httpx.post(
@@ -105,7 +105,7 @@ def activate_n8n_workflow(
 @router.post("/workflows/{workflow_id}/deactivate", summary="Deactivate an n8n workflow")
 def deactivate_n8n_workflow(
     workflow_id: str = Path(..., pattern=r"^[A-Za-z0-9_-]{1,64}$"),
-    _: User = Depends(require_operator),
+    _: User = Depends(require_admin),
 ):
     try:
         resp = httpx.post(
