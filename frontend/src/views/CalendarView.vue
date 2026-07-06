@@ -32,7 +32,7 @@
         <div
           v-for="(cell, i) in cells"
           :key="i"
-          class="relative min-h-[5.5rem] border border-ctrl-border rounded p-1.5 transition-colors"
+          class="relative min-h-[5.5rem] min-w-0 overflow-hidden border border-ctrl-border rounded p-1.5 transition-colors"
           :class="[
             cell.isSunday ? 'cal-sunday text-ctrl-dim' : 'bg-ctrl-panel/40',
             cell.isToday ? 'ring-1 ring-status-info' : '',
@@ -53,15 +53,15 @@
               v-for="m in cell.meetings"
               :key="m.lead_id + m.when"
               @click="openLead(m.lead_id)"
-              class="block w-full text-left px-1.5 py-0.5 rounded text-2xs border transition-all hover:brightness-110"
+              class="block w-full max-w-full text-left px-1.5 py-0.5 rounded text-2xs border transition-all hover:brightness-110 overflow-hidden"
               :class="m.status === 'past'
                 ? 'bg-ctrl-raised border-ctrl-border text-ctrl-dim'
                 : 'bg-status-info-bg border-status-info text-status-info'"
               :title="`${m.lead_name} · ${m.institution || '—'} · ${fmtTime(m.when)}`"
             >
-              <div class="flex items-center gap-1 truncate">
-                <span class="tabnum font-medium">{{ fmtTime(m.when) }}</span>
-                <span class="truncate">{{ m.lead_name }}</span>
+              <div class="flex items-center gap-1 min-w-0">
+                <span class="tabnum font-medium shrink-0">{{ fmtTime(m.when) }}</span>
+                <span class="truncate min-w-0 flex-1">{{ m.lead_name }}</span>
               </div>
             </button>
             <div v-if="!cell.meetings.length" class="text-2xs text-ctrl-dim">—</div>
@@ -70,11 +70,9 @@
               <button
                 v-for="t in tasksByDay[cell.dateKey]"
                 :key="t.id"
-                class="block w-full text-left px-1.5 py-0.5 rounded text-2xs border bg-status-warn-bg border-status-warn text-status-warn hover:brightness-110 transition-all"
+                class="block w-full max-w-full text-left px-1.5 py-0.5 rounded text-2xs border bg-status-warn-bg border-status-warn text-status-warn hover:brightness-110 transition-all truncate"
                 :title="`${t.label} · ${t.assignee_display || 'unassigned'} · ${t.status}`"
-              >
-                <span class="truncate">📋 {{ t.label }}</span>
-              </button>
+              >📋 {{ t.label }}</button>
             </div>
           </div>
         </div>
