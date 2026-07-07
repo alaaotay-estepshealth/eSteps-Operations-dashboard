@@ -12,6 +12,7 @@ from app.database import get_db, get_leads_db
 from app.config import settings
 from app.models.ai_request import AIRequest
 from app.models.audit_log import AuditLog
+from app.models.booking import Booking
 from app.models.workflow_execution import WorkflowExecution
 from app.models.user import User
 from app.schemas.responses import (
@@ -108,11 +109,24 @@ def get_dashboard_metrics(
     # ── Human review queue ───────────────────────────────────────────────
     review_queue = db.query(AIRequest).filter(AIRequest.status == "pending_review").count()
 
-    # ── Pipeline funnel (from leads source DB) ───────────────────────────
+    # ── Pipeline funnel ──────────────────────────────────────────────────
+    # Replies: `conversations.direction='inbound'` (leads DB) is the truth.
+    # `leads.reply_received` is a flag that not every inbound path flips.
+    # Meetings: ops `bookings` table is authoritative. `leads.meeting_booked_at`
+    # only reflects the subset propagated back to the leads DB.
     total = total_leads or 1
     contacted = _lq("SELECT COUNT(*) FROM leads WHERE touch_number > 0")
-    replied = _lq("SELECT COUNT(*) FROM leads WHERE reply_received IS TRUE")
-    meetings = _lq("SELECT COUNT(*) FROM leads WHERE meeting_booked_at IS NOT NULL")
+    replied = _lq(
+        "SELECT COUNT(DISTINCT lead_id) FROM conversations WHERE direction = 'inbound'"
+    )
+    meetings = db.query(func.count(func.distinct(Booking.lead_id))).filter(
+        Booking.status != "cancelled"
+    ).scalar() or 0
+    if meetings == 0:
+        # Fallback for envs where ops.bookings is empty but leads flag is set.
+        meetings = _lq(
+            "SELECT COUNT(*) FROM leads WHERE meeting_booked_at IS NOT NULL"
+        )
     funnel = [
         PipelineFunnelStep(label="Loaded", count=total_leads, pct=100.0),
         PipelineFunnelStep(label="Contacted", count=contacted, pct=round(contacted / total * 100, 1)),
